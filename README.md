@@ -10,7 +10,7 @@ The interface has two areas: **Calculator** and a permission-filtered **Admin** 
 
 **Calculator** shows the configured bands with their price each. Step a band up with the plus/minus buttons or type the number, watch the running total, and press **Save count**. Saved counts appear under Recent counts with today / this-week / all-time totals in the hero, and a mistaken count can be removed. Drafts stay on the device for 24 hours until saved.
 
-**Scan a screenshot**: snip your inventory (Win+Shift+S), then paste or drop the image. Band names are recognised on the device with a vendored copy of Tesseract (Apache-2.0); nothing is uploaded. Counts are read when the digits are legible; small hotbar counts can fall back to 1, so check them before saving. Unknown item names can be taught as aliases for a band.
+**Scan a screenshot**: snip your inventory (Win+Shift+S), then paste or drop the image. Everything is read on the device with a vendored copy of Tesseract (Apache-2.0); nothing is uploaded. The scanner finds each "Colour Stack" slot, reads its `xN` count and its weight, and checks the two against each other (a Purple Stack weighs 100 g per band, so "500 g" confirms five). Inventory grids, property storage and the hotbar all work. A count the weight does not agree with is flagged "double-check this one" so you can fix it before saving. Unknown item names can be taught as aliases for a band. The first screenshot after opening the page can take a few seconds while the reader loads; later ones take one to three seconds.
 
 **Quick math** is a plain calculator for odd sums. Nothing typed there is saved.
 

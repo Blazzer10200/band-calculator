@@ -21,7 +21,10 @@ Shared business logic lives in `*-model.js`. Both API adapters (`dev-api.mjs`, `
 ```text
 app.js                 routes (routeNames, followRoute, render), header, page mounting
 finance-ui.js          Calculator screen (mountFinance, mode 'bands'): counts, scanner, quick math
-band-scan.js           screenshot OCR (ocr-engine/ocr-worker/ocr-core + eng.traineddata.gz, vendored Tesseract)
+band-scan.js           screenshot OCR (ocr-engine/ocr-worker/ocr-core + eng.traineddata.gz, vendored Tesseract).
+                       Pass 1 finds "<Color> Stack" names on the whole image; pass 2 crops each slot, stretches
+                       contrast per row (median = background, so grey hotbar slots read), reads "xN" + weight and
+                       cross-checks them (100 g per band, violet 200 g). Unit votes only accept multiples of 10.
 quick-math.js          plain calculator panel
 finance-model.js       money rules, receipts, integer cents
 finance-api.js         finance endpoints shared by both adapters
@@ -31,7 +34,7 @@ presence.js                                     server-side presence (no UI anym
 security-*.js / security-*.mjs                  MFA, recovery codes, encrypted backups
 experience.css         current layout overrides (check here first for layout bugs)
 calculator.css         calculator screen styles
-*.css                  domain stylesheets (finance, auth, security, polish)
+*.css                  domain stylesheets (auth, security, polish); one rule per line, pruned of unused selectors
 server.mjs             local dev server, loopback only, port 4173
 scripts/dev.ps1        launcher: status/start/restart, PID-guarded
 scripts/sample-server.mjs   sample data server (4174)

@@ -1,5 +1,29 @@
 # Workspace release — September 2026
 
+## September 19 (evening) — Screenshot scanner, full-screen fit, cleanup
+
+Frontend-only follow-up to the calculator release. The backend is unchanged.
+
+### User-facing changes
+
+- Screenshot scanner rewritten for the game's inventory: it finds every "Colour Stack" name, then reads the slot's `xN` count and stack weight together and cross-checks them (a Purple Stack weighs 100 g each, so "500 g" confirms five). Inventory grids, property storage and the hotbar all read correctly; a count the weight does not agree with is marked "double-check this one". Hotbar slots on a grey panel now read as well as inventory slots on black.
+- Each screenshot reads in about one to three seconds after the first, and the reader loads in the background as soon as the calculator opens, so the first screenshot no longer waits.
+- Desktop fit: on a 1080p screen the whole calculator (header, running total, count panel, scanner, quick math, recent counts, footer) fits without scrolling. Wide screens use three columns; the header sits on one row. Phone layout unchanged.
+- Thinner, darker page scrollbar that blends with the theme.
+
+### Internal cleanup
+
+- `finance-ui.js` dropped the unreachable Treasury, ledger, payout, bills and cashbook code (350 → 280 lines); only the band calculator remains.
+- Every stylesheet was pruned of rules whose classes no JS or HTML produces (832 selectors: old roster, contacts, treasury, sidebar and legacy stash layouts). `finance.css` is gone; its confirmation-card rules moved to `calculator.css`.
+- No file, route or API change for the backend.
+
+### Release checks and delivery
+
+- 86 automated tests passed. `npm run check`, Worker build, Pages build and module-graph verification passed (32 browser assets).
+- Scanner bench on real screenshots: inventory grid, property storage and hotbar samples all match the true counts exactly.
+- Browser checks on the local preview: calculator at 1920×1080 with no page scroll and at 375 px with no horizontal overflow; scanner runs in-app under the production Content-Security-Policy.
+- Frontend published through the manual GitHub Pages workflow.
+
 ## September 19 — Band calculator release
 
 This release turns the site into a single-purpose band calculator. Login, approvals, roles, MFA, and encrypted backups are unchanged. The backend is unchanged; the frontend only stops using endpoints it no longer needs.
