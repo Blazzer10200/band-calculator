@@ -1,10 +1,24 @@
-# PTO Roaster
+# PTO Band calculator
 
-A private FiveM finance site with member stashes, payouts, weekly bills, an optional cashbook, and a simple roster. See [release notes](./RELEASE-NOTES.md) for the current workflows and operational boundaries.
+A private FiveM band calculator: sign in, count your bands at the configured prices, scan inventory screenshots on your own device, and save the totals. Admins approve accounts, assign roles, edit band prices, and keep encrypted backups. See [release notes](./RELEASE-NOTES.md) for the current workflows and operational boundaries.
 
 For local work, use the [development shortcuts](./docs/DEVELOPMENT.md): `npm run dev:start` reuses the existing preview, `npm run dev:status` checks it, and `npm run dev:sample` opens an isolated sample-data server. Project guidance and the code map are in [AGENTS.md](./AGENTS.md).
 
-## Local finance simplification — September 9
+## Band calculator — September 19
+
+The interface has two areas: **Calculator** and a permission-filtered **Admin** area (Accounts & access, Join requests, Settings & backups).
+
+**Calculator** shows the configured bands with their price each. Step a band up with the plus/minus buttons or type the number, watch the running total, and press **Save count**. Saved counts appear under Recent counts with today / this-week / all-time totals in the hero, and a mistaken count can be removed. Drafts stay on the device for 24 hours until saved.
+
+**Scan a screenshot**: snip your inventory (Win+Shift+S), then paste or drop the image. Band names are recognised on the device with a vendored copy of Tesseract (Apache-2.0); nothing is uploaded. Counts are read when the digits are legible; small hotbar counts can fall back to 1, so check them before saving. Unknown item names can be taught as aliases for a band.
+
+**Quick math** is a plain calculator for odd sums. Nothing typed there is saved.
+
+**Settings & backups** lets settings managers edit each band's color, name, and price, add or remove bands, reorder them, and rename the website. Price changes apply to new counts only; saved counts keep the prices they were entered at. New workspaces start at the live PTO rates (Loose change $25, White $100, Blue $1,500, Purple $2,500, Brown $6,000, Yellow $12,500). Full encrypted backups remain under Accounts & access → Backups.
+
+Roster, Treasury, the member sidebar, earlier-ledger records, and the JSON roster/ledger export-import are no longer part of the interface. Their data is untouched on the server and in full encrypted backups; the backend endpoints and permission categories still exist. Old roster/treasury/contacts bookmarks open the calculator. The sections below describe the earlier finance workspace and stay for reference.
+
+## Historical: local finance simplification — September 9
 
 The login screen now has a compact layout, an accessible password-visibility button, and a custom keep-signed-in checkbox. Main and sample previews use separate HttpOnly session cookies so switching between ports no longer signs out the other workspace. The main preview uses `pto_dev_session_4173`; sample previews use `pto_dev_session_<port>`. Existing local browsers need one fresh login after this cookie-name change. The production cookie and its security attributes are unchanged.
 

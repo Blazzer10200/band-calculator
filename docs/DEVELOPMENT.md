@@ -10,7 +10,7 @@ Use Node.js 24+. Commands run from the repository root. No dependency install, d
 | `npm run dev:sample` | Reuses/starts the sample server; data exists only in memory |
 | `npm run dev:sample:status` | Reports the sample server's status |
 | `npm run test:finance` | Finance, preservation, and presence regression tests |
-| `npm run test:access` | Access, membership, roster, and authentication regression tests |
+| `npm run test:access` | Access, membership, and authentication regression tests |
 | `npm run verify:build` | Checks syntax, builds Worker and Pages, verifies browser modules |
 
 The original `npm run dev` remains available for a foreground server. Normal agent work uses `dev:start`. Logs and launch records live in `.local/dev-PORT.*`. An existing manually started server can be reused, but the launcher refuses to kill it. The launcher's restart guard checks creation time as well as PID to protect against PID reuse.
@@ -21,15 +21,12 @@ Append these routes to the intended origin; never switch between origins without
 
 | Page | Hash | Stable controls |
 | --- | --- | --- |
-| My stash | `#/stash` | `.finance-main-nav [data-page="overview"]`, `[data-own-tab]` |
-| Treasury | `#/treasury` | `.finance-main-nav [data-page="history"]`, `[data-treasury-tab]` |
-| Roster | `#/roster` | `[data-page="roster"]`, `#roster-search`, `[data-member-filter]` |
+| Calculator | `#/stash` | `.finance-main-nav [data-page="overview"]`, `[data-finance-quantity]`, `[data-calc-hero]` |
 | Accounts & access | `#/admin` | `.admin-nav [data-page="access"]`, `[data-access-tab]` |
 | Join requests | `#/requests` | `.admin-nav [data-page="requests"]` |
-| Settings & backups | `#/settings` | `.admin-nav [data-page="settings"]`, `#finance-settings-form` |
-| Member list | On permitted pages | `#members-sidebar`, `.member-drawer > summary` |
+| Settings & backups | `#/settings` | `.admin-nav [data-page="settings"]`, `#settings-form`, `[data-setting-band]` |
 
-Old home/calendar/update bookmarks resolve to an allowed finance page. `#/people` remains an alias for account administration. Permissions determine which controls appear; don't create alternate access routes for testing.
+Old home/calendar/update/roster/treasury/contacts bookmarks resolve to the calculator (or the first allowed admin page). `#/people` remains an alias for account administration. Permissions determine which controls appear; don't create alternate access routes for testing.
 
 ## Isolated sample preview
 

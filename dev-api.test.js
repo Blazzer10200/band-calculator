@@ -3,10 +3,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createDevApi} from './dev-api.mjs';
 
-test('new workspaces start empty with no example rates or notes',()=>{
+test('new workspaces start empty with the live band rates and no notes',()=>{
   const api=createDevApi();try{const data=JSON.parse(api.snapshot().tables.workspace[0].document);
     assert.deepEqual(data.members,[]);assert.deepEqual(data.contacts,[]);assert.deepEqual(data.purchases,[]);
-    assert.ok(data.bands.every(b=>b.price===0));assert.equal(data.gangNotes,'');assert.equal(data.rosterLimit,0);
+    assert.ok(data.bands.length===6&&data.bands.every(b=>b.price>0));assert.equal(data.gangNotes,'');assert.equal(data.rosterLimit,0);
   }finally{api.close();}
 });
 const origin='http://127.0.0.1:4173',password='Development-Test-Password-123';

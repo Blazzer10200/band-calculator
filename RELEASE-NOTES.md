@@ -1,5 +1,25 @@
 # Workspace release — September 2026
 
+## September 19 — Band calculator release
+
+This release turns the site into a single-purpose band calculator. Login, approvals, roles, MFA, and encrypted backups are unchanged. The backend is unchanged; the frontend only stops using endpoints it no longer needs.
+
+### User-facing changes
+
+- The main navigation is **Calculator** plus the permission-filtered **Admin** area (Accounts & access, Join requests, Settings & backups). Roster, Treasury, the member sidebar, earlier-ledger records, and the JSON roster/ledger export-import are removed from the interface. Their stored data is untouched and still present in full encrypted backups.
+- Calculator: step or type band counts, see a running total, save counts, and review or remove recent counts. Today / this week / all time totals sit in the hero.
+- Screenshot scanner: paste or drop inventory screenshots and the band names are read on the device (vendored Tesseract, Apache-2.0; no upload). Counts are read where the digits are legible; small hotbar counts can still fall back to 1 and should be checked.
+- Quick math: a plain calculator panel for odd sums. Nothing there is saved.
+- Settings & backups: edit band colors, names, and prices, add or remove bands, reorder them, and rename the website. New workspaces start at the live PTO rates: Loose change $25, White $100, Blue $1,500, Purple $2,500, Brown $6,000, Yellow $12,500.
+- Old `#/roster`, `#/treasury`, and `#/contacts` bookmarks open the calculator.
+- Content-Security-Policy now allows `'wasm-unsafe-eval'` so the on-device OCR engine can run.
+
+### Release checks and delivery
+
+- 86 automated tests passed after removing the four roster-only tests. `npm run check`, Worker build, Pages build, and module-graph verification passed (33 browser assets).
+- Browser checks on the local preview: calculator, settings, accounts, and join requests at desktop and 375 px with no horizontal overflow; legacy routes redirect; no failed requests after reload.
+- Frontend published through the manual GitHub Pages workflow. No backend deploy is required for this release.
+
 ## September 9 — finance workspace release
 
 This release supersedes the interface and weekly-house-payment descriptions in the historical notes below. Releases use the content fingerprint in the generated `release.json`; the package manifest is not a separate application release counter.

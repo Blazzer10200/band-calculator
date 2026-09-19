@@ -267,44 +267,12 @@ button,input,select,textarea { font-family: var(--font-body); }
   .simple-roster .roster-toolbar { gap: 12px; }
 }
 
-/* People uses the same readable role cards as the account editor. */
 .workspace-content { flex: 1; min-width: 0; }
 .workspace-content main { min-width: 0; }
-#members-sidebar { min-width: 0; padding: 16px 30px 0; }
-.member-drawer { border: 1px solid var(--line); border-radius: 10px; background: #1c2026; overflow: hidden; }
-.member-drawer > summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 16px; cursor: pointer; font-size: 13px; font-weight: 700; }
-.member-drawer > summary::after { content: ''; width: 7px; height: 7px; margin-right: 3px; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: rotate(45deg); transition: transform var(--motion-fast) var(--motion-ease); color: var(--muted); flex-shrink: 0; }
-.member-drawer[open] > summary::after { transform: rotate(225deg); }
-.member-drawer > summary span { margin-left: auto; color: var(--muted); font-size: 11px; font-weight: 400; }
-.member-sidebar-content { padding: 0 16px 16px; }
-.simple-shell .member-presence-help,.simple-shell .member-presence-message { font-size: 11px; color: var(--muted); line-height: 1.6; }
-.member-presence-message:empty { display: none; }
-.member-rank-group { margin-top: 22px; }
-.member-rank-group h2 { display: flex; gap: 8px; font: 600 11px 'DM Sans',sans-serif; text-transform: uppercase; letter-spacing: .8px; color: var(--text-soft); }
-.member-rank-group h2 span { color: var(--muted); }
-.member-rank-group ul { list-style: none; margin: 10px 0 0; padding: 0; }
-.sidebar-member { display: flex; align-items: center; gap: 10px; padding: 10px 0; }
-.sidebar-avatar { position: relative; flex-shrink: 0; display: grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; background: #2e435b; color: #c7def8; font-size: 11px; font-weight: 700; }
-.sidebar-avatar i { position: absolute; right: -1px; bottom: -1px; width: 11px; height: 11px; border: 2px solid #1c2026; border-radius: 50%; background: #57be91; }
-.sidebar-member > span:last-child { min-width: 0; }
-.sidebar-member strong { display: block; font-size: 13px; line-height: 1.4; overflow-wrap: anywhere; }
-.sidebar-member small { display: block; margin-top: 3px; font-size: 10px; color: var(--muted); }
-.sidebar-member.offline .sidebar-avatar,.sidebar-member.unknown .sidebar-avatar { background: #2a2f36; color: #a6b1bf; }
-.sidebar-member.offline .sidebar-avatar i,.sidebar-member.unknown .sidebar-avatar i { background: #7b8592; }
-.sidebar-member.offline strong { color: var(--text-soft); }
-.member-sidebar-content > .text-button { margin-top: 20px; font-size: 11px; }
+.settings-name { display: block; margin-top: 18px; font-size: 12px; font-weight: 600; color: var(--text-soft); }
+#site-name { margin: 6px 0 14px; max-width: 320px; }
 @media (min-width: 1100px) {
-  .simple-shell:has(.with-members),.finance-header { max-width: 1560px; }
-  .with-members { display: grid; grid-template-columns: minmax(0,1fr) 240px; }
-  .with-members main { grid-column: 1; grid-row: 1; }
-  .with-members #members-sidebar { grid-column: 2; grid-row: 1; padding: 26px 20px 26px 0; }
-  .member-drawer { position: sticky; top: 20px; max-height: calc(100vh - 40px); overflow-y: auto; scrollbar-width: thin; }
-  .member-drawer > summary { flex-wrap: wrap; gap: 6px; }
-  .member-drawer > summary span { order: 3; width: 100%; margin: 0; }
-  .member-drawer > summary::after { margin-left: auto; }
-}
-@media (max-width: 600px) {
-  #members-sidebar { padding: 14px 17px 0; }
+  .finance-header { max-width: 1560px; }
 }
 
 .role-presets { display: flex; flex-wrap: wrap; gap: 8px; margin: 16px 0; }

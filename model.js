@@ -74,6 +74,7 @@ export function validateBackup(data) {
   return {...data,members,ranks,rosterLimit,gangNotes};
 }
 export function freshData() {
-  const bands = [['Loose change','#c2c9b5'],['White band','#e4e5e0'],['Blue band','#82aef5'],['Purple band','#ba98e4'],['Brown band','#b28b6f']].map(([name,color],i)=>({id:'band-'+i,name,color,price:0,active:true}));
-  return {version:1,name:'PTO Roaster',bands,contacts:[],purchases:[],members:[],ranks:[...defaultRanks],rosterLimit:0,gangNotes:''};
+  // Default prices mirror the live PTO band rates (integer cents).
+  const bands = [['Loose change','#c2c9b5',2500],['White band','#e4e5e0',10000],['Blue band','#82aef5',150000],['Purple band','#ba98e4',250000],['Brown band','#b28b6f',600000],['Yellow band','#f2e23a',1250000]].map(([name,color,price],i)=>({id:'band-'+i,name,color,price,active:true}));
+  return {version:1,name:'PTO',bands,contacts:[],purchases:[],members:[],ranks:[...defaultRanks],rosterLimit:0,gangNotes:''};
 }

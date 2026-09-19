@@ -2,9 +2,10 @@ import {sampleData} from './test-fixtures.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {freshData,total,paid,balance,addPayment,validatePurchase,validateBackup,cents,contactBalance,payContact} from './model.js';
-test('sample data is valid and personal ledger has no invented prices or records',()=>{
+test('sample data is valid and a fresh workspace starts at the live PTO band rates with no records',()=>{
   const demo=validateBackup(sampleData()),own=validateBackup(freshData());
-  assert.equal(demo.purchases.length,6);assert.equal(own.purchases.length,0);assert.equal(own.contacts.length,0);assert.ok(own.bands.every(b=>b.price===0));
+  assert.equal(demo.purchases.length,6);assert.equal(own.purchases.length,0);assert.equal(own.contacts.length,0);
+  assert.deepEqual(own.bands.map(b=>[b.name,b.price]),[['Loose change',2500],['White band',10000],['Blue band',150000],['Purple band',250000],['Brown band',600000],['Yellow band',1250000]]);
 });
 test('partial payments reduce balance, a final payment settles, and overpayments fail',()=>{
   const p=sampleData().purchases[0];assert.equal(total(p),1200000);assert.equal(paid(p),600000);assert.equal(balance(p),600000);

@@ -16,11 +16,11 @@ Keep work focused on the user's current request. This file maps the project; it 
 | Concern | Start with |
 | --- | --- |
 | Routes, header, page mounting | app.js: routeNames, followRoute, render |
-| Stash, Treasury, finance settings | finance-ui.js: mountFinance |
-| Money rules, receipts, bills | finance-model.js, finance-api.js |
-| Roster and identity editing | roster.js, profile-ui.js, member-profile.js |
+| Calculator screen (counts, scanner, quick math) | finance-ui.js: mountFinance; band-scan.js; quick-math.js |
+| Money rules, receipts | finance-model.js, finance-api.js |
+| Identity editing | profile-ui.js, member-profile.js |
 | Login, approvals, roles | auth-ui.js, access-model.js |
-| Member sidebar and activity | presence-ui.js, presence.js |
+| Presence (server only) | presence.js |
 | Local / hosted endpoints | dev-api.mjs / cloud-api.mjs |
 | Current layout overrides | experience.css; then the relevant domain stylesheet |
 | Browser asset/build boundary | client-files.mjs, build-client.mjs |
@@ -32,7 +32,7 @@ Search anchored symbols with `rg -n`; avoid dumping minified CSS or whole large 
 - Resolve tabs by exact origin each turn when a handle is stale; tab IDs change. Reuse the selected browser and existing matching tabs. Follow the browser tool's documented API.
 - 4173 is the user's separate local database; 4174 is disposable sample data. Neither is production. Do not copy production data to make a screenshot.
 - Preserve the user's signed-in session and unfinished forms. Do not restart a healthy server or sign the user out merely to check another role; use the sample preview.
-- Use named controls or the existing `data-page`, `data-access-tab`, and `data-treasury-tab` attributes. Batch independent inspection; observe state after actions. See docs/DEVELOPMENT.md for routes and sample accounts.
+- Use named controls or the existing `data-page`, `data-access-tab`, and `data-finance-quantity` attributes. Batch independent inspection; observe state after actions. See docs/DEVELOPMENT.md for routes and sample accounts.
 - Login credentials are private. Never print password/token files or include their contents in tool output, commands, docs, or screenshots. Use the authorized browser form; do not add a login bypass.
 - Verify affected routes once at the sizes relevant to the change. Measure overflow against `document.documentElement.clientWidth`. Reset temporary viewport overrides and retain the user's preview tab.
 
