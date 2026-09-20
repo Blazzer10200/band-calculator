@@ -327,7 +327,7 @@ html{scrollbar-gutter:stable;scrollbar-width:thin;scrollbar-color:#343941 var(--
 .calc-edge[data-edge=e]{top:22px;bottom:22px;right:-5px;width:10px;cursor:ew-resize}
 .calc-edge[data-edge=s]{left:22px;right:22px;bottom:-5px;height:10px;cursor:ns-resize}
 .calc-edge[data-edge=se]{right:-6px;bottom:-6px;width:16px;height:16px;border-radius:5px;background:var(--accent);cursor:nwse-resize}
-@media (min-width:1100px){.calc-arrange-bar{display:flex}.calc-page>.page-heading{display:flex;align-items:flex-end;justify-content:space-between;gap:12px 20px;flex-wrap:wrap}}
+@media (min-width:820px){.calc-arrange-bar{display:flex}.calc-page>.page-heading{display:flex;align-items:flex-end;justify-content:space-between;gap:12px 20px;flex-wrap:wrap}}
 /* Confirmation card shown before a saved count is removed. */
 .finance-confirm{padding:24px;margin:0 0 24px;border-color:var(--accent)}
 .finance-confirm p{margin:12px 0;font-size:13px}

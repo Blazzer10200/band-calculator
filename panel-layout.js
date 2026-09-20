@@ -9,7 +9,7 @@ const PANELS=[
   {id:'math',selector:'.calc-math',name:'Quick math'},
   {id:'recent',selector:'.calc-recent',name:'Recent counts'}
 ];
-const WIDE='(min-width:1100px)',MIN_W=250,MIN_H=110,STEP=8,COLS=48;
+const WIDE='(min-width:820px)',MIN_W=250,MIN_H=110,STEP=8,COLS=48;
 const clamp=(n,lo,hi)=>Math.min(hi,Math.max(lo,n));
 const snapY=n=>Math.round(n/STEP)*STEP;
 const snapX=f=>Math.round(f*COLS)/COLS;
