@@ -37,8 +37,12 @@ export async function mountFinance(root,session,{request,onSaved,onClean,canRefr
   const rawQty=b=>{const v=draft.quantities[b.id];return typeof v==='string'&&/^\d*$/.test(v)?v:String(qty(b));};
   const draftLines=()=>state.bands.filter(b=>b.price&&qty(b)>0).map(b=>({...b,quantity:qty(b),amount:b.price*qty(b)}));
   const draftTotal=()=>draftLines().reduce((n,l)=>n+l.amount,0);
-  const share=(b,total)=>{const q=qty(b);return total&&b.price&&q?(b.price*q/total*100).toFixed(2):0;};
-  const barHtml=total=>state.bands.map(b=>'<i style="--band:'+esc(b.color)+';--w:'+share(b,total)+'%"></i>').join('');
+  const whenLabel=e=>{const when=new Date(e.at);return (financeDay(when.getTime())===state.day?'Today':when.toLocaleDateString('en-US',{month:'short',day:'numeric'}))+' · '+when.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});};
+  const lastCount=()=>counted().slice().sort((a,b)=>Date.parse(b.at)-Date.parse(a.at))[0];
+  // The hero shows what is being counted; with nothing in progress it keeps the last saved count instead of dropping to $0.
+  const heroView=()=>{const total=draftTotal(),last=total?null:lastCount();return last?{label:'Last count saved · '+whenLabel(last),lines:last.lines.map(l=>({...l,amount:l.price*l.quantity})),total:depositTotal(last)}:{label:'Counting now',lines:draftLines(),total};};
+  const widthOf=(b,view)=>{const l=view.lines.find(x=>x.id===b.id);return view.total&&l?(l.amount/view.total*100).toFixed(2):0;};
+  const barHtml=view=>state.bands.map(b=>'<i style="--band:'+esc(b.color)+';--w:'+widthOf(b,view)+'%"></i>').join('');
   const breakdownHtml=lines=>lines.length?lines.map(l=>'<span style="--band:'+esc(l.color)+'"><i></i>'+esc(l.name)+' <strong>'+l.quantity.toLocaleString()+'</strong></span>').join(''):'<span class="calc-hint">Step a band up or drop a screenshot to start counting.</span>';
   function animateMoney(el,from,to){
     if(el.calcFrame)cancelAnimationFrame(el.calcFrame);
@@ -48,23 +52,23 @@ export async function mountFinance(root,session,{request,onSaved,onClean,canRefr
     el.calcFrame=requestAnimationFrame(step);
   }
   function refreshTotals(){
-    const lines=draftLines(),total=draftTotal();
-    root.querySelectorAll('[data-finance-total]').forEach(el=>{const from=Number(el.dataset.cents);el.dataset.cents=total;if(el.classList.contains('calc-total'))el.classList.toggle('is-zero',!total);animateMoney(el,Number.isFinite(from)?from:total,total);});
-    root.querySelectorAll('[data-calc-bar] i').forEach((seg,i)=>{const b=state.bands[i];if(b)seg.style.setProperty('--w',share(b,total)+'%');});
-    const breakdown=root.querySelector('[data-calc-breakdown]');if(breakdown)breakdown.innerHTML=breakdownHtml(lines);
+    const total=draftTotal(),view=heroView();
+    root.querySelectorAll('[data-finance-total]').forEach(el=>{const hero=el.classList.contains('calc-total'),next=hero?view.total:total,from=Number(el.dataset.cents);el.dataset.cents=next;if(hero)el.classList.toggle('is-zero',!next);animateMoney(el,Number.isFinite(from)?from:next,next);});
+    const label=root.querySelector('[data-calc-label]');if(label)label.textContent=view.label;
+    root.querySelectorAll('[data-calc-bar] i').forEach((seg,i)=>{const b=state.bands[i];if(b)seg.style.setProperty('--w',widthOf(b,view)+'%');});
+    const breakdown=root.querySelector('[data-calc-breakdown]');if(breakdown)breakdown.innerHTML=breakdownHtml(view.lines);
     for(const b of state.bands){const tile=root.querySelector('[data-calc-tile="'+CSS.escape(b.id)+'"]');if(!tile)continue;const q=qty(b),line=tile.querySelector('[data-calc-line]'),next=money(b.price*q);tile.classList.toggle('is-active',!!(b.price&&q));if(line.textContent!==next){line.textContent=next;if(!reduceMotion){line.classList.remove('is-bump');void line.offsetWidth;line.classList.add('is-bump');}}}
     root.querySelectorAll('[data-calc-save]').forEach(b=>b.disabled=!total||!!root.busy);
     root.querySelectorAll('[data-discard]').forEach(b=>b.disabled=!hasDraft()||!!root.busy);
     root.querySelector('[data-calc-hero]')?.classList.remove('is-saved');
   }
   function countRow(e){
-    const when=new Date(e.at),today=financeDay(when.getTime())===state.day,label=(today?'Today':when.toLocaleDateString('en-US',{month:'short',day:'numeric'}))+' · '+when.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});
-    return '<article class="calc-row" data-receipt-id="'+esc(e.id)+'"><div><time datetime="'+esc(e.at)+'">'+esc(label)+'</time>'+(e.notes?'<span class="calc-row-note">'+esc(e.notes)+'</span>':'')+'<span class="calc-chips">'+e.lines.map(l=>'<span style="--band:'+esc(l.color)+'"><i></i>'+esc(l.name.replace(/ band$/i,''))+' <strong>'+l.quantity.toLocaleString()+'</strong></span>').join('')+'</span></div><div class="calc-row-amount"><strong>'+money(depositTotal(e))+'</strong>'+(e.status==='pending'&&!e.paidAmount?'<button type="button" class="text-button" data-remove="'+esc(e.id)+'">Remove</button>':'<small>Paid out</small>')+'</div></article>';
+    return '<article class="calc-row" data-receipt-id="'+esc(e.id)+'"><div><time datetime="'+esc(e.at)+'">'+esc(whenLabel(e))+'</time>'+(e.notes?'<span class="calc-row-note">'+esc(e.notes)+'</span>':'')+'<span class="calc-chips">'+e.lines.map(l=>'<span style="--band:'+esc(l.color)+'"><i></i>'+esc(l.name.replace(/ band$/i,''))+' <strong>'+l.quantity.toLocaleString()+'</strong></span>').join('')+'</span></div><div class="calc-row-amount"><strong>'+money(depositTotal(e))+'</strong>'+(e.status==='pending'&&!e.paidAmount?'<button type="button" class="text-button" data-remove="'+esc(e.id)+'">Remove</button>':'<small>Paid out</small>')+'</div></article>';
   }
   function heroHtml(){
-    const rows=counted(),lines=draftLines(),total=draftTotal(),start=weekStart();
+    const rows=counted(),view=heroView(),start=weekStart();
     const today=sumOf(rows.filter(e=>entryDay(e)===state.day)),week=sumOf(rows.filter(e=>entryDay(e)>=start)),all=sumOf(rows);
-    return '<section class="calc-hero" data-calc-hero aria-label="Running total"><div class="calc-readout"><span class="calc-label">Counting now</span><strong class="calc-total'+(total?'':' is-zero')+'" data-finance-total data-cents="'+total+'">'+money(total)+'</strong><div class="calc-bar" data-calc-bar aria-hidden="true">'+barHtml(total)+'</div><p class="calc-breakdown" data-calc-breakdown>'+breakdownHtml(lines)+'</p></div><dl class="calc-totals"><div><dt>Today</dt><dd>'+money(today)+'</dd></div><div><dt>This week</dt><dd>'+money(week)+'</dd></div><div><dt>All time</dt><dd>'+money(all)+'</dd></div></dl></section>';
+    return '<section class="calc-hero" data-calc-hero aria-label="Running total"><div class="calc-readout"><span class="calc-label" data-calc-label>'+esc(view.label)+'</span><strong class="calc-total'+(view.total?'':' is-zero')+'" data-finance-total data-cents="'+view.total+'">'+money(view.total)+'</strong><div class="calc-bar" data-calc-bar aria-hidden="true">'+barHtml(view)+'</div><p class="calc-breakdown" data-calc-breakdown>'+breakdownHtml(view.lines)+'</p></div><dl class="calc-totals"><div><dt>Today</dt><dd>'+money(today)+'</dd></div><div><dt>This week</dt><dd>'+money(week)+'</dd></div><div><dt>All time</dt><dd>'+money(all)+'</dd></div></dl></section>';
   }
   function countHtml(){
     const total=draftTotal();

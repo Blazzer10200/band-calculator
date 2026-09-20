@@ -1,5 +1,20 @@
 # Workspace release — September 2026
 
+## September 19 (night) — Running total keeps the saved count
+
+Frontend-only fix. The backend is unchanged.
+
+### User-facing changes
+
+- The running total at the top no longer drops to $0 after "Save count". While nothing is being counted it shows the last saved count (amount, band breakdown, and when it was saved) under the label "Last count saved". As soon as a band is stepped up it switches back to "Counting now" with the new draft.
+- The count panel still clears after a save so the next count starts fresh; today, this week, and all time update as before.
+
+### Release checks and delivery
+
+- 86 automated tests passed. `npm run check`, Worker build, Pages build and module-graph verification passed.
+- Browser check on the sample server: save a count, running total keeps the saved amount and breakdown, panel resets, count appears in Recent counts.
+- Frontend published through the manual GitHub Pages workflow.
+
 ## September 19 (evening) — Screenshot scanner, full-screen fit, cleanup
 
 Frontend-only follow-up to the calculator release. The backend is unchanged.
