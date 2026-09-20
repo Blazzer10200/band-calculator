@@ -26,6 +26,8 @@ band-scan.js           screenshot OCR (ocr-engine/ocr-worker/ocr-core + eng.trai
                        contrast per row (median = background, so grey hotbar slots read), reads "xN" + weight and
                        cross-checks them (100 g per band, violet 200 g). Unit votes only accept multiples of 10.
 quick-math.js          plain calculator panel
+panel-layout.js        "Arrange panels" mode: drag/resize the calculator panels, saved per account.
+                       Only active at 820px+; x/w are fractions of the workspace width, y/h are pixels.
 finance-model.js       money rules, receipts, integer cents
 finance-api.js         finance endpoints shared by both adapters
 profile-ui.js / member-profile.js               identity editing (used by auth-ui)

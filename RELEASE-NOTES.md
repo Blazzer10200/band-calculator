@@ -1,5 +1,37 @@
 # Workspace release — September 2026
 
+## September 20 — Arrangeable panels, undo a payout, scanner and refresh fixes
+
+Frontend-only change. The backend is unchanged; undo uses the existing reversal endpoint.
+
+### User-facing changes
+
+- **Arrange panels.** A control next to the page title on windows 820 px and wider. Turn it on and each panel gets a name tag you can drag, plus a right and bottom edge you can pull to resize. Arrow keys move a selected panel, Shift and arrow keys resize it. The layout is remembered per account on that device, and "Reset layout" puts everything back. Narrowing the window drops back to the normal stacked layout and leaves arrange mode automatically.
+- **Undo the last payout.** Under the running total, the Owner now sees "Undo the $X payout from …" for the most recent payout that has not already been undone. Confirming puts those counts back to "Not paid out yet" and the running total picks up where it left off.
+- **Forget what the scanner learned.** The scanner remembers band names it was taught and the stack size it works out per band. If it ever learns a wrong stack size, every later scan inherits it, so there is now a "Forget what the scanner learned" button in the scan panel. It appears only when there is something to forget.
+
+### Fixes
+
+- A count saved while a background refresh was already in flight could be wiped from the screen by that older answer landing afterwards — the count was safe on the server but disappeared from Recent counts and the running total until the next refresh. Refreshes that started before a save are now discarded.
+- Removing a screenshot while it was being read left the reader writing its result into nothing and the status stuck on "Screenshot 0 of 1".
+- A screenshot that failed to read leaked its decoded image and full-size canvas until the tab was reloaded.
+- Leaving arrange mode on and then narrowing the window froze the page's background refreshing with no visible way to switch it off.
+- A panel dragged flush to the right edge could then be resized below its minimum width.
+- "Fill in counts" could become clickable, and do nothing, after confirming a payout or a removal.
+- Background tabs kept polling the server every three seconds; a hidden tab now idles and refreshes when it is brought back.
+- The band colour on the Settings page is now escaped like every other value there.
+- The sample preview server could not serve the scanner's language file, so screenshot scanning was broken on it.
+
+### Housekeeping
+
+- Eight stale deploy bundles (2.8 MB) moved out of the repository root into the private `.local/archive/`.
+
+### Release checks and delivery
+
+- 86 automated tests passed. `npm run check`, Worker build, Pages build and module-graph verification passed.
+- Browser check on the sample server as Owner: save $5,000 → Mark as paid out → running total $0 and the count reads "Paid out" → Undo → back to $5,000 and the count is removable again. Arrange mode gives four drag handles at 1200 px, and narrowing to 375 px exits it, clears the handles, restores refreshing and leaves no sideways scroll. "Forget what the scanner learned" clears the stored names and sizes and then hides itself. No console errors.
+- Frontend published through the manual GitHub Pages workflow.
+
 ## September 19 (late) — Running total until payout, screenshots clear after save
 
 Frontend-only change. The backend is unchanged; the payout button uses the existing payout endpoint.

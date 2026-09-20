@@ -77,6 +77,9 @@ export function matchBand(text,bands,aliases={}){
 const readJson=(key)=>{try{const v=JSON.parse(localStorage.getItem(key)||'{}');return v&&typeof v==='object'?v:{};}catch{return {};}};
 const writeJson=(key,value)=>{try{localStorage.setItem(key,JSON.stringify(value));}catch{}};
 export function readAliases(){return readJson(ALIAS_KEY);}
+// What the scanner picked up can be wrong, and a wrong stack size quietly rewrites every later count, so it has to be forgettable.
+export const hasLearned=()=>Object.keys(readJson(ALIAS_KEY)).length>0||Object.keys(readJson(UNIT_KEY)).length>0;
+export function forgetLearned(){for(const key of [ALIAS_KEY,UNIT_KEY])try{localStorage.removeItem(key);}catch{}}
 export function saveAlias(text,bandId){
   const aliases=readAliases(),key=normalizeName(text).join(' ');
   if(!key)return aliases;
@@ -178,6 +181,8 @@ export async function scanImage(file,bands,{onProgress}={}){
   };
   const worker=await reader();
   const src=await raster(file),aliases=readAliases();
+  // The decoded bitmap and its full-size canvas are the largest things here, so a failed read has to release them too.
+  try{
   await worker.setParameters({tessedit_pageseg_mode:PSM.SPARSE_TEXT,tessedit_char_whitelist:''});
   const {data}=await worker.recognize(await toBlob(src.canvas),{},{blocks:true});
   const all=(data.blocks||[]).flatMap(b=>b.paragraphs.flatMap(p=>p.lines)).map(l=>({text:l.text.trim().replace(/\s+/g,' '),confidence:l.confidence,x0:l.bbox.x0,y0:l.bbox.y0,x1:l.bbox.x1,y1:l.bbox.y1}));
@@ -201,6 +206,6 @@ export async function scanImage(file,bands,{onProgress}={}){
     const units=inferUnits(rows,readJson(UNIT_KEY));writeJson(UNIT_KEY,units);
     items=rows.map((row,i)=>{const {qty,sure}=resolveCount(row,units[row.bandId]||null),line=names[i];return {text:line.text,bandId:line.band.id,name:line.band.name,qty,sure,raw:row.text,x:Math.round(line.x0/src.scale),y:Math.round(line.y0/src.scale)};});
   }
-  src.canvas.width=src.canvas.height=0;src.bitmap.close();
   return {items,others,ms:Math.round(performance.now()-started)};
+  }finally{src.canvas.width=src.canvas.height=0;src.bitmap?.close?.();}
 }

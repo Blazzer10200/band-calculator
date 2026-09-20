@@ -21,10 +21,12 @@ Append these routes to the intended origin; never switch between origins without
 
 | Page | Hash | Stable controls |
 | --- | --- | --- |
-| Calculator | `#/stash` | `.finance-main-nav [data-page="overview"]`, `[data-finance-quantity]`, `[data-calc-hero]`, `[data-arrange]`, `[data-grip]` |
+| Calculator | `#/stash` | `.finance-main-nav [data-page="overview"]`, `[data-finance-quantity]`, `[data-calc-hero]`, `[data-payout]`, `[data-undo-payout]`, `[data-arrange]`, `[data-grip]`, `[data-scan-forget]` |
 | Accounts & access | `#/admin` | `.admin-nav [data-page="access"]`, `[data-access-tab]` |
 | Join requests | `#/requests` | `.admin-nav [data-page="requests"]` |
 | Settings & backups | `#/settings` | `.admin-nav [data-page="settings"]`, `#settings-form`, `[data-setting-band]` |
+
+`[data-arrange]` and `[data-grip]` exist only at 820 px and wider; below that the calculator keeps its stacked layout and the arrange bar is hidden. `[data-undo-payout]` appears for the Owner only, and only while a payout of theirs has not been undone.
 
 Old home/calendar/update/roster/treasury/contacts bookmarks resolve to the calculator (or the first allowed admin page). `#/people` remains an alias for account administration. Permissions determine which controls appear; don't create alternate access routes for testing.
 

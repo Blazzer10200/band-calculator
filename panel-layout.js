@@ -18,7 +18,7 @@ const validBox=b=>!!b&&finite(b.x)&&finite(b.y)&&finite(b.w)&&finite(b.h)&&b.w>0
 
 // One live layout at a time, so the breakpoint listener below never piles up across page mounts.
 let current=null;
-matchMedia(WIDE).addEventListener('change',()=>current?.refresh());
+try{matchMedia(WIDE).addEventListener('change',()=>current?.refresh());}catch{}
 
 export function createPanelLayout({key,onChange}){
   let state=null,arranging=false,root=null;
@@ -100,7 +100,7 @@ export function createPanelLayout({key,onChange}){
         next.x=clamp(snapX(box.x+dx),0,Math.max(0,1-box.w));
         next.y=Math.max(0,snapY(box.y+dy));
       }else{
-        if(dir.includes('e'))next.w=clamp(snapX(box.w+dx),MIN_W/width,1-box.x);
+        if(dir.includes('e'))next.w=clamp(snapX(box.w+dx),MIN_W/width,Math.max(MIN_W/width,1-box.x));
         if(dir.includes('s'))next.h=Math.max(MIN_H,snapY(box.h+dy));
       }
       state[id]=next;apply();
@@ -122,7 +122,7 @@ export function createPanelLayout({key,onChange}){
     e.preventDefault();
     const width=workspace.getBoundingClientRect().width||1,box={...state[id]};
     if(e.shiftKey){
-      if(d[0])box.w=clamp(box.w+d[0]*(STEP/width),MIN_W/width,1-box.x);
+      if(d[0])box.w=clamp(box.w+d[0]*(STEP/width),MIN_W/width,Math.max(MIN_W/width,1-box.x));
       if(d[1])box.h=Math.max(MIN_H,box.h+d[1]*STEP);
     }else{
       if(d[0])box.x=clamp(box.x+d[0]*(STEP/width),0,Math.max(0,1-box.w));
@@ -151,10 +151,10 @@ export function createPanelLayout({key,onChange}){
   state=load();
   const instance={
     apply,bind,
-    refresh:()=>apply(),
+    // The arrange controls are hidden on a narrow window, so leaving the mode on would freeze refreshes with no way out.
+    refresh(){if(arranging&&!wide()){arranging=false;save();}apply();onChange?.();},
     arranging:()=>arranging,
     customised:()=>!!state,
-    available:()=>wide(),
     setArranging(next){
       const workspace=workspaceOf(root);
       if(next&&!state)state=measure(workspace);

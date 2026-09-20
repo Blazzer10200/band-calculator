@@ -17,6 +17,7 @@ Keep work focused on the user's current request. This file maps the project; it 
 | --- | --- |
 | Routes, header, page mounting | app.js: routeNames, followRoute, render |
 | Calculator screen (counts, scanner, quick math) | finance-ui.js: mountFinance; band-scan.js; quick-math.js |
+| Dragging and resizing the calculator panels | panel-layout.js: createPanelLayout (820px and wider only) |
 | Money rules, receipts | finance-model.js, finance-api.js |
 | Identity editing | profile-ui.js, member-profile.js |
 | Login, approvals, roles | auth-ui.js, access-model.js |

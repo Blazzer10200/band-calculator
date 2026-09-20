@@ -2,7 +2,7 @@ import {depositTotal,financeMoney as money,nextThursday,financeDay} from './fina
 import {readDraft,saveDraft,clearDraft} from './draft-store.js';
 import {escapeHtml as esc,downloadCsv,readUiPreference,saveUiPreference} from './ui-utils.js';
 import {createQuickMath} from './quick-math.js';
-import {scanImage,saveAlias,warmReader} from './band-scan.js';
+import {scanImage,saveAlias,warmReader,hasLearned,forgetLearned} from './band-scan.js';
 import {createPanelLayout} from './panel-layout.js';
 export async function mountFinance(root,session,{request,onSaved,onClean,canRefresh}){
   let state,confirm=null,message='',limit=20;
@@ -17,19 +17,21 @@ export async function mountFinance(root,session,{request,onSaved,onClean,canRefr
   const notice=()=>root.querySelector('[data-finance-message]');
   function error(e){message=e.message;const n=notice();if(n){n.hidden=false;n.textContent=message;n.scrollIntoView({block:'nearest'});}}
   const canLoad=()=>root.isConnected&&!root.busy&&!confirm&&!layout.arranging()&&canRefresh();
+  // A save that lands while a background refresh is in flight makes that refresh's answer older than what we already have.
+  let writes=0;
   root.seenAccounts=session.versions?.accounts;
   root.openReceipt=id=>{root.querySelector('[data-receipt-id="'+CSS.escape(id)+'"]')?.scrollIntoView({block:'nearest'});};
   function seen(){root.seenRevision=state.revision;root.seenDay=state.day;}
-  root.refreshFromServer=async()=>{if(!canLoad())return false;const fresh=await request('/api/finance');if(!canLoad())return false;const focus=document.activeElement?.id,selection=document.activeElement?.selectionStart;
+  root.refreshFromServer=async()=>{if(!canLoad())return false;const sent=writes,fresh=await request('/api/finance');if(!canLoad()||sent!==writes)return false;const focus=document.activeElement?.id,selection=document.activeElement?.selectionStart;
     if(fresh.ratesVersion===state.ratesVersion&&root.querySelector('#finance-deposit-form')?.contains(document.activeElement)){state=fresh;seen();patchAroundForm();return true;}
     if(hasDraft()&&fresh.ratesVersion!==state.ratesVersion)message='Band values were updated. Your counts are kept and the total now uses the new values.';state=fresh;seen();render();if(focus){const el=root.querySelector('#'+CSS.escape(focus));el?.focus();if(el&&selection!==null&&['text','search'].includes(el.type))el.setSelectionRange(selection,selection);}return true;};
   async function save(path,body){
-    if(root.busy)return;root.busy=true;root.querySelectorAll('button,input,textarea,select').forEach(el=>el.disabled=true);message='';
+    if(root.busy)return;root.busy=true;writes++;root.querySelectorAll('button,input,textarea,select').forEach(el=>el.disabled=true);message='';
     try{state=await request(path,{method:'POST',body});seen();confirm=null;
       if(path==='/api/finance/deposits'){clearDraft(memberId);draft={quantities:{},notes:'',requestId:crypto.randomUUID()};savedFlash=true;shots=[];}
-      onClean();await onSaved(path==='/api/finance/payouts'?'paid':body?.decision==='withdraw'?'removed':'saved');render();
+      onClean();await onSaved(path==='/api/finance/payouts'?'paid':path==='/api/finance/reversals'?'undone':body?.decision==='withdraw'?'removed':'saved');render();
       if(savedFlash){savedFlash=false;root.querySelector('[data-calc-hero]')?.classList.add('is-saved');root.querySelector('.calc-row')?.classList.add('is-new');const status=root.querySelector('[data-draft-status]');if(status){status.textContent='Count saved. Your totals are updated.';status.classList.add('is-saved');}}
-    }catch(e){error(e);}finally{root.busy=false;root.querySelectorAll('button,input,textarea,select').forEach(el=>el.disabled=false);root.querySelectorAll('[data-finance-quantity]').forEach(i=>i.disabled=!state.bands.find(b=>b.id===i.dataset.financeQuantity)?.price);syncQuantityButtons();const total=draftTotal();root.querySelectorAll('[data-calc-save]').forEach(b=>b.disabled=!total);root.querySelectorAll('[data-discard]').forEach(b=>b.disabled=!hasDraft());}
+    }catch(e){error(e);}finally{root.busy=false;root.querySelectorAll('button,input,textarea,select').forEach(el=>el.disabled=false);root.querySelectorAll('[data-finance-quantity]').forEach(i=>i.disabled=!state.bands.find(b=>b.id===i.dataset.financeQuantity)?.price);syncQuantityButtons();const total=draftTotal();root.querySelectorAll('[data-calc-save]').forEach(b=>b.disabled=!total);root.querySelectorAll('[data-discard]').forEach(b=>b.disabled=!hasDraft());renderScan?.();}
   }
   const counted=()=>own().filter(e=>['pending','paid'].includes(e.status));
   const entryDay=e=>financeDay(Date.parse(e.at));
@@ -41,6 +43,8 @@ export async function mountFinance(root,session,{request,onSaved,onClean,canRefr
   const draftTotal=()=>draftLines().reduce((n,l)=>n+l.amount,0);
   const whenLabel=e=>{const when=new Date(e.at);return (financeDay(when.getTime())===state.day?'Today':when.toLocaleDateString('en-US',{month:'short',day:'numeric'}))+' · '+when.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});};
   const unpaid=()=>own().filter(e=>e.status==='pending');
+  // Payouts arrive newest first, so the first of this member's that has not been reversed is the one to undo.
+  const lastPayout=()=>(state.payouts||[]).find(p=>p.userId===memberId&&!p.reversal)||null;
   // The hero is a running tally: every saved count not paid out yet, plus whatever is being counted right now. A payout starts it over.
   const heroView=()=>{
     const rows=unpaid(),saved=rows.reduce((n,e)=>n+(e.remaining??depositTotal(e)),0),counting=draftTotal(),byBand=new Map();
@@ -77,7 +81,10 @@ export async function mountFinance(root,session,{request,onSaved,onClean,canRefr
   function heroHtml(){
     const rows=counted(),view=heroView(),start=weekStart();
     const today=sumOf(rows.filter(e=>entryDay(e)===state.day)),week=sumOf(rows.filter(e=>entryDay(e)>=start)),all=sumOf(rows);
-    const payout=view.saved&&state.canManage&&state.owner?'<div class="calc-hero-actions"><button type="button" class="button secondary" data-payout>Mark as paid out</button><small>Got paid for these? This starts the running total over.</small></div>':'';
+    const actions=[],undo=state.owner?lastPayout():null;
+    if(view.saved&&state.canManage&&state.owner)actions.push('<button type="button" class="button secondary" data-payout>Mark as paid out</button><small>Got paid for these? This starts the running total over.</small>');
+    if(undo)actions.push('<button type="button" class="text-button" data-undo-payout="'+esc(undo.id)+'">Undo the '+money(undo.amount)+' payout from '+esc(whenLabel(undo))+'</button>');
+    const payout=actions.length?'<div class="calc-hero-actions">'+actions.join('')+'</div>':'';
     return '<section class="calc-hero" data-calc-hero aria-label="Running total"><div class="calc-readout"><span class="calc-label">Not paid out yet</span><strong class="calc-total'+(view.total?'':' is-zero')+'" data-finance-total data-cents="'+view.total+'">'+money(view.total)+'</strong><div class="calc-bar" data-calc-bar aria-hidden="true">'+barHtml(view)+'</div><p class="calc-breakdown" data-calc-breakdown>'+breakdownHtml(view)+'</p>'+payout+'</div><dl class="calc-totals"><div><dt>Today</dt><dd>'+money(today)+'</dd></div><div><dt>This week</dt><dd>'+money(week)+'</dd></div><div><dt>All time</dt><dd>'+money(all)+'</dd></div></dl></section>';
   }
   function countHtml(){
@@ -87,7 +94,7 @@ export async function mountFinance(root,session,{request,onSaved,onClean,canRefr
     return '<section class="panel calc-count"><div class="calc-head"><div><h2>Count bands</h2><p>Step each band up or type the number. The total updates as you go.</p></div></div><form id="finance-deposit-form"><div class="calc-columns" aria-hidden="true"><span></span><span>Band</span><span>How many</span><span>Value</span></div><div class="calc-tiles">'+(tiles||'<p class="calc-empty"><strong>No bands set up yet.</strong>Add them in Settings and they show up here.</p>')+'</div><div class="calc-note"><label for="finance-note">Note (optional)</label><textarea id="finance-note" maxlength="2000" rows="1" placeholder="Where these came from…">'+esc(draft.notes)+'</textarea></div><div class="calc-save"><div class="calc-save-total"><span>Total</span><strong data-finance-total data-cents="'+total+'">'+money(total)+'</strong></div><div class="calc-save-actions"><button type="button" class="text-button" data-discard '+(hasDraft()?'':'disabled')+'>Clear</button>'+saveButton+'</div></div><p class="calc-status" data-draft-status>'+(hasDraft()?'Not saved yet. This count stays on this device for 24 hours.':'Saving adds this count to today, this week, and all time. Enter moves to the next band, Ctrl+Enter saves.')+'</p><div class="calc-sticky"><div class="calc-sticky-total"><span>Total</span><strong data-finance-total data-cents="'+total+'">'+money(total)+'</strong></div><div class="calc-sticky-actions"><button type="button" class="text-button" data-discard '+(hasDraft()?'':'disabled')+'>Clear</button>'+saveButton+'</div></div></form></section>';
   }
   function scanHtml(){
-    return '<aside class="panel calc-scan"><div class="calc-head"><div><h2>Scan a screenshot</h2><p>Snip your inventory with <kbd>Win</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd>, then paste it here. Bands and counts are read right on this device. More than one screenshot is fine.</p></div></div><label class="scan-zone" data-scan-zone><input type="file" accept="image/*" multiple data-scan-input hidden><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2.5"/><circle cx="9" cy="10" r="2"/><path d="m21 16-5-5-8 8"/></svg><strong>Drop a screenshot here</strong><small><kbd>Ctrl</kbd>+<kbd>V</kbd> anywhere on this page works too · or click to choose a file</small></label><div class="scan-actions"><button type="button" class="button secondary scan-paste" data-scan-paste><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/></svg>Paste screenshot</button></div><div class="scan-preview" data-scan-preview hidden><p class="scan-status" data-scan-status></p><div class="scan-shots" data-scan-shots></div><div class="scan-result" data-scan-result hidden></div><div class="scan-actions"><button type="button" class="text-button" data-scan-clear>Remove all</button></div></div></aside>';
+    return '<aside class="panel calc-scan"><div class="calc-head"><div><h2>Scan a screenshot</h2><p>Snip your inventory with <kbd>Win</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd>, then paste it here. Bands and counts are read right on this device. More than one screenshot is fine.</p></div></div><label class="scan-zone" data-scan-zone><input type="file" accept="image/*" multiple data-scan-input hidden><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2.5"/><circle cx="9" cy="10" r="2"/><path d="m21 16-5-5-8 8"/></svg><strong>Drop a screenshot here</strong><small><kbd>Ctrl</kbd>+<kbd>V</kbd> anywhere on this page works too · or click to choose a file</small></label><div class="scan-actions"><button type="button" class="button secondary scan-paste" data-scan-paste><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/></svg>Paste screenshot</button>'+(hasLearned()?'<button type="button" class="text-button" data-scan-forget>Forget what the scanner learned</button>':'')+'</div><div class="scan-preview" data-scan-preview hidden><p class="scan-status" data-scan-status></p><div class="scan-shots" data-scan-shots></div><div class="scan-result" data-scan-result hidden></div><div class="scan-actions"><button type="button" class="text-button" data-scan-clear>Remove all</button></div></div></aside>';
   }
   function mathHtml(){
     return '<details class="panel calc-math" data-calc-math'+(mathOpen?' open':'')+'><summary><span class="calc-math-icon" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 7h6M9 12h.01M12 12h.01M15 12h.01M9 16h.01M12 16h.01M15 16h.01"/></svg></span><span><h2>Quick math</h2><p>A plain calculator for the odd sum. Nothing here is saved.</p></span><span class="calc-math-chevron" aria-hidden="true"></span></summary>'+quickMath.html()+'</details>';
@@ -158,6 +165,7 @@ export async function mountFinance(root,session,{request,onSaved,onClean,canRefr
   function bindEntries(){
     root.querySelectorAll('[data-more]').forEach(b=>b.onclick=()=>{limit+=20;render();});
     root.querySelectorAll('[data-payout]').forEach(b=>b.onclick=()=>{const v=heroView();if(!v.saved)return;showConfirm({title:'Mark as paid out',description:money(v.saved)+' across '+v.rows.length+(v.rows.length===1?' count':' counts'),path:'/api/finance/payouts',body:{requestId:crypto.randomUUID(),userId:memberId,expectedOutstanding:v.saved,expectedEntryIds:v.rows.map(e=>e.id)},verb:'payout',note:'These counts move to Paid out and the running total starts over from $0. Today, this week and all time keep their numbers.'});});
+    root.querySelectorAll('[data-undo-payout]').forEach(b=>b.onclick=()=>{const p=(state.payouts||[]).find(x=>x.id===b.dataset.undoPayout);if(!p)return;showConfirm({title:'Undo this payout',description:money(p.amount)+' · '+whenLabel(p),path:'/api/finance/reversals',body:{requestId:crypto.randomUUID(),kind:'payout',recordId:p.id,reason:'Undone from the calculator',revision:state.revision},verb:'undo',note:'The counts in this payout go back to Not paid out yet and the running total picks up where it left off.'});});
     root.querySelectorAll('[data-remove]').forEach(b=>b.onclick=()=>{const e=state.deposits.find(e=>e.id===b.dataset.remove);if(!e)return;showConfirm({title:'Remove this count',description:money(depositTotal(e))+' · '+e.lines.map(l=>l.name+' × '+l.quantity).join(', '),path:'/api/finance/deposits/'+e.id,body:{decision:'withdraw',reason:'Removed from the calculator'},verb:'removal',note:'It comes off your totals right away. Treasury history keeps a withdrawn record.'});});
   }
   async function thumbnail(file,max=420){
@@ -239,8 +247,8 @@ export async function mountFinance(root,session,{request,onSaved,onClean,canRefr
           scanProgress=label()+': reading…';renderScan?.();
           try{
             const r=await scanImage(s.file,state.bands,{onProgress:p=>{scanProgress=p.phase==='load'?p.text:label()+': '+p.text;const st=root.querySelector('[data-scan-status]');if(st&&st.classList.contains('is-busy'))st.textContent=scanProgress;}});
-            s.scan=r;
-          }catch(e){s.scan={error:e?.message||'Could not read this screenshot.'};}
+            if(shots.includes(s))s.scan=r;
+          }catch(e){if(shots.includes(s))s.scan={error:e?.message||'Could not read this screenshot.'};}
           renderScan?.();
         }
         scanProgress='';
@@ -273,6 +281,7 @@ export async function mountFinance(root,session,{request,onSaved,onClean,canRefr
         load(files);
       }catch(e){say(e.name==='NotAllowedError'?'Clipboard access was blocked. Allow it in the address bar, or press Ctrl+V on the page instead.':e.message);}
     });
+    root.querySelector('[data-scan-forget]')?.addEventListener('click',()=>{forgetLearned();message='The scanner forgot the band names and stack sizes it had picked up. The next screenshot starts fresh.';render();});
     if(root.pasteHandler)document.removeEventListener('paste',root.pasteHandler);
     root.pasteHandler=e=>{if(!root.isConnected){document.removeEventListener('paste',root.pasteHandler);return;}const files=[...(e.clipboardData?.items||[])].filter(i=>i.type.startsWith('image/')).map(i=>i.getAsFile()).filter(Boolean);if(files.length){e.preventDefault();load(files);zone.scrollIntoView({block:'nearest',behavior:reduceMotion?'auto':'smooth'});}};
     document.addEventListener('paste',root.pasteHandler);
