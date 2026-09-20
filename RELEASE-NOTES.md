@@ -1,5 +1,21 @@
 # Workspace release — September 2026
 
+## September 19 (late) — Running total until payout, screenshots clear after save
+
+Frontend-only change. The backend is unchanged; the payout button uses the existing payout endpoint.
+
+### User-facing changes
+
+- The big number at the top is now "Not paid out yet": every count saved since your last payout, plus whatever you are counting right now. Save $20,000, then count $8,200 more and it reads $28,200 while you type and after you save. The band chips add up the same way, and a line under them says how much of the number is still unsaved.
+- "Mark as paid out" button under the running total (Owner only, shown when something is unpaid). It asks to confirm, then moves those counts to "Paid out" in Recent counts and starts the running total over from $0. Today, this week and all time are not affected.
+- Pasted screenshots are removed from the scanner as soon as the count is saved.
+
+### Release checks and delivery
+
+- 86 automated tests passed. `npm run check`, Worker build, Pages build and module-graph verification passed.
+- Browser check on the sample server as Owner: save $20,000 → count $8,200 more → $28,200 before and after saving → Mark as paid out → $0 and both counts show Paid out; a pasted screenshot disappears after save; no sideways scroll at 375 px.
+- Frontend published through the manual GitHub Pages workflow.
+
 ## September 19 (night) — Running total keeps the saved count
 
 Frontend-only fix. The backend is unchanged.

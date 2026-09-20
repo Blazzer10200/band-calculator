@@ -24,8 +24,8 @@ export async function mountFinance(root,session,{request,onSaved,onClean,canRefr
   async function save(path,body){
     if(root.busy)return;root.busy=true;root.querySelectorAll('button,input,textarea,select').forEach(el=>el.disabled=true);message='';
     try{state=await request(path,{method:'POST',body});seen();confirm=null;
-      if(path==='/api/finance/deposits'){clearDraft(memberId);draft={quantities:{},notes:'',requestId:crypto.randomUUID()};savedFlash=true;}
-      onClean();await onSaved(body?.decision==='withdraw'?'removed':'saved');render();
+      if(path==='/api/finance/deposits'){clearDraft(memberId);draft={quantities:{},notes:'',requestId:crypto.randomUUID()};savedFlash=true;shots=[];}
+      onClean();await onSaved(path==='/api/finance/payouts'?'paid':body?.decision==='withdraw'?'removed':'saved');render();
       if(savedFlash){savedFlash=false;root.querySelector('[data-calc-hero]')?.classList.add('is-saved');root.querySelector('.calc-row')?.classList.add('is-new');const status=root.querySelector('[data-draft-status]');if(status){status.textContent='Count saved. Your totals are updated.';status.classList.add('is-saved');}}
     }catch(e){error(e);}finally{root.busy=false;root.querySelectorAll('button,input,textarea,select').forEach(el=>el.disabled=false);root.querySelectorAll('[data-finance-quantity]').forEach(i=>i.disabled=!state.bands.find(b=>b.id===i.dataset.financeQuantity)?.price);syncQuantityButtons();const total=draftTotal();root.querySelectorAll('[data-calc-save]').forEach(b=>b.disabled=!total);root.querySelectorAll('[data-discard]').forEach(b=>b.disabled=!hasDraft());}
   }
@@ -38,12 +38,20 @@ export async function mountFinance(root,session,{request,onSaved,onClean,canRefr
   const draftLines=()=>state.bands.filter(b=>b.price&&qty(b)>0).map(b=>({...b,quantity:qty(b),amount:b.price*qty(b)}));
   const draftTotal=()=>draftLines().reduce((n,l)=>n+l.amount,0);
   const whenLabel=e=>{const when=new Date(e.at);return (financeDay(when.getTime())===state.day?'Today':when.toLocaleDateString('en-US',{month:'short',day:'numeric'}))+' · '+when.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});};
-  const lastCount=()=>counted().slice().sort((a,b)=>Date.parse(b.at)-Date.parse(a.at))[0];
-  // The hero shows what is being counted; with nothing in progress it keeps the last saved count instead of dropping to $0.
-  const heroView=()=>{const total=draftTotal(),last=total?null:lastCount();return last?{label:'Last count saved · '+whenLabel(last),lines:last.lines.map(l=>({...l,amount:l.price*l.quantity})),total:depositTotal(last)}:{label:'Counting now',lines:draftLines(),total};};
-  const widthOf=(b,view)=>{const l=view.lines.find(x=>x.id===b.id);return view.total&&l?(l.amount/view.total*100).toFixed(2):0;};
+  const unpaid=()=>own().filter(e=>e.status==='pending');
+  // The hero is a running tally: every saved count not paid out yet, plus whatever is being counted right now. A payout starts it over.
+  const heroView=()=>{
+    const rows=unpaid(),saved=rows.reduce((n,e)=>n+(e.remaining??depositTotal(e)),0),counting=draftTotal(),byBand=new Map();
+    const add=l=>{const t=byBand.get(l.id)||{id:l.id,quantity:0,amount:0};t.quantity+=l.quantity;t.amount+=l.quantity*l.price;byBand.set(l.id,t);};
+    for(const e of rows)for(const l of e.lines)add(l);
+    for(const l of draftLines())add(l);
+    const lines=state.bands.filter(b=>byBand.has(b.id)).map(b=>({...byBand.get(b.id),name:b.name,color:b.color}));
+    const note=counting?money(counting)+' of this is the count you have not saved yet.':saved?'Saved counts since your last payout.':'';
+    return {rows,saved,counting,total:saved+counting,lines,note};
+  };
+  const widthOf=(b,view)=>{const l=view.lines.find(x=>x.id===b.id);return view.total&&l?Math.min(100,l.amount/view.total*100).toFixed(2):0;};
   const barHtml=view=>state.bands.map(b=>'<i style="--band:'+esc(b.color)+';--w:'+widthOf(b,view)+'%"></i>').join('');
-  const breakdownHtml=lines=>lines.length?lines.map(l=>'<span style="--band:'+esc(l.color)+'"><i></i>'+esc(l.name)+' <strong>'+l.quantity.toLocaleString()+'</strong></span>').join(''):'<span class="calc-hint">Step a band up or drop a screenshot to start counting.</span>';
+  const breakdownHtml=view=>view.lines.length?view.lines.map(l=>'<span style="--band:'+esc(l.color)+'"><i></i>'+esc(l.name)+' <strong>'+l.quantity.toLocaleString()+'</strong></span>').join('')+(view.note?'<span class="calc-hint">'+esc(view.note)+'</span>':''):'<span class="calc-hint">Step a band up or drop a screenshot to start counting.</span>';
   function animateMoney(el,from,to){
     if(el.calcFrame)cancelAnimationFrame(el.calcFrame);
     if(reduceMotion||from===to||Math.abs(to-from)>5000000000){el.textContent=money(to);return;}
@@ -54,9 +62,8 @@ export async function mountFinance(root,session,{request,onSaved,onClean,canRefr
   function refreshTotals(){
     const total=draftTotal(),view=heroView();
     root.querySelectorAll('[data-finance-total]').forEach(el=>{const hero=el.classList.contains('calc-total'),next=hero?view.total:total,from=Number(el.dataset.cents);el.dataset.cents=next;if(hero)el.classList.toggle('is-zero',!next);animateMoney(el,Number.isFinite(from)?from:next,next);});
-    const label=root.querySelector('[data-calc-label]');if(label)label.textContent=view.label;
     root.querySelectorAll('[data-calc-bar] i').forEach((seg,i)=>{const b=state.bands[i];if(b)seg.style.setProperty('--w',widthOf(b,view)+'%');});
-    const breakdown=root.querySelector('[data-calc-breakdown]');if(breakdown)breakdown.innerHTML=breakdownHtml(view.lines);
+    const breakdown=root.querySelector('[data-calc-breakdown]');if(breakdown)breakdown.innerHTML=breakdownHtml(view);
     for(const b of state.bands){const tile=root.querySelector('[data-calc-tile="'+CSS.escape(b.id)+'"]');if(!tile)continue;const q=qty(b),line=tile.querySelector('[data-calc-line]'),next=money(b.price*q);tile.classList.toggle('is-active',!!(b.price&&q));if(line.textContent!==next){line.textContent=next;if(!reduceMotion){line.classList.remove('is-bump');void line.offsetWidth;line.classList.add('is-bump');}}}
     root.querySelectorAll('[data-calc-save]').forEach(b=>b.disabled=!total||!!root.busy);
     root.querySelectorAll('[data-discard]').forEach(b=>b.disabled=!hasDraft()||!!root.busy);
@@ -68,7 +75,8 @@ export async function mountFinance(root,session,{request,onSaved,onClean,canRefr
   function heroHtml(){
     const rows=counted(),view=heroView(),start=weekStart();
     const today=sumOf(rows.filter(e=>entryDay(e)===state.day)),week=sumOf(rows.filter(e=>entryDay(e)>=start)),all=sumOf(rows);
-    return '<section class="calc-hero" data-calc-hero aria-label="Running total"><div class="calc-readout"><span class="calc-label" data-calc-label>'+esc(view.label)+'</span><strong class="calc-total'+(view.total?'':' is-zero')+'" data-finance-total data-cents="'+view.total+'">'+money(view.total)+'</strong><div class="calc-bar" data-calc-bar aria-hidden="true">'+barHtml(view)+'</div><p class="calc-breakdown" data-calc-breakdown>'+breakdownHtml(view.lines)+'</p></div><dl class="calc-totals"><div><dt>Today</dt><dd>'+money(today)+'</dd></div><div><dt>This week</dt><dd>'+money(week)+'</dd></div><div><dt>All time</dt><dd>'+money(all)+'</dd></div></dl></section>';
+    const payout=view.saved&&state.canManage&&state.owner?'<div class="calc-hero-actions"><button type="button" class="button secondary" data-payout>Mark as paid out</button><small>Got paid for these? This starts the running total over.</small></div>':'';
+    return '<section class="calc-hero" data-calc-hero aria-label="Running total"><div class="calc-readout"><span class="calc-label">Not paid out yet</span><strong class="calc-total'+(view.total?'':' is-zero')+'" data-finance-total data-cents="'+view.total+'">'+money(view.total)+'</strong><div class="calc-bar" data-calc-bar aria-hidden="true">'+barHtml(view)+'</div><p class="calc-breakdown" data-calc-breakdown>'+breakdownHtml(view)+'</p>'+payout+'</div><dl class="calc-totals"><div><dt>Today</dt><dd>'+money(today)+'</dd></div><div><dt>This week</dt><dd>'+money(week)+'</dd></div><div><dt>All time</dt><dd>'+money(all)+'</dd></div></dl></section>';
   }
   function countHtml(){
     const total=draftTotal();
@@ -133,6 +141,7 @@ export async function mountFinance(root,session,{request,onSaved,onClean,canRefr
   function render(){if(!root.isConnected)return;root.innerHTML='<div class="notice" data-finance-message role="status" '+(message?'':'hidden')+'>'+esc(message)+'</div><div data-finance-confirm>'+confirmation()+'</div>'+ownPage();bind();bindConfirm();}
   function bindEntries(){
     root.querySelectorAll('[data-more]').forEach(b=>b.onclick=()=>{limit+=20;render();});
+    root.querySelectorAll('[data-payout]').forEach(b=>b.onclick=()=>{const v=heroView();if(!v.saved)return;showConfirm({title:'Mark as paid out',description:money(v.saved)+' across '+v.rows.length+(v.rows.length===1?' count':' counts'),path:'/api/finance/payouts',body:{requestId:crypto.randomUUID(),userId:memberId,expectedOutstanding:v.saved,expectedEntryIds:v.rows.map(e=>e.id)},verb:'payout',note:'These counts move to Paid out and the running total starts over from $0. Today, this week and all time keep their numbers.'});});
     root.querySelectorAll('[data-remove]').forEach(b=>b.onclick=()=>{const e=state.deposits.find(e=>e.id===b.dataset.remove);if(!e)return;showConfirm({title:'Remove this count',description:money(depositTotal(e))+' · '+e.lines.map(l=>l.name+' × '+l.quantity).join(', '),path:'/api/finance/deposits/'+e.id,body:{decision:'withdraw',reason:'Removed from the calculator'},verb:'removal',note:'It comes off your totals right away. Treasury history keeps a withdrawn record.'});});
   }
   async function thumbnail(file,max=420){
