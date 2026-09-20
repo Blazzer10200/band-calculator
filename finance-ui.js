@@ -3,18 +3,20 @@ import {readDraft,saveDraft,clearDraft} from './draft-store.js';
 import {escapeHtml as esc,downloadCsv,readUiPreference,saveUiPreference} from './ui-utils.js';
 import {createQuickMath} from './quick-math.js';
 import {scanImage,saveAlias,warmReader} from './band-scan.js';
+import {createPanelLayout} from './panel-layout.js';
 export async function mountFinance(root,session,{request,onSaved,onClean,canRefresh}){
   let state,confirm=null,message='',limit=20;
   const memberId=session.user.id;
   const sectionKey=name=>`finance-section:${session.user.id}:${name}`;
   const quickMath=createQuickMath();let mathOpen=readUiPreference(sectionKey('math'))==='open';
+  const layout=createPanelLayout({key:sectionKey('layout'),onChange:()=>syncArrangeBar()});
   let draft=readDraft(memberId)||{quantities:{},notes:'',requestId:crypto.randomUUID()},draftStored=true,savedFlash=false,entered=false,shots=[],scanQueue=null,scanProgress='',scanOthersOpen=false,renderScan=null;
   const reduceMotion=matchMedia('(prefers-reduced-motion: reduce)').matches;
   const own=()=>state.deposits.filter(e=>e.userId===memberId);
   const hasDraft=()=>Object.values(draft.quantities).some(v=>Number(v)>0)||!!draft.notes;
   const notice=()=>root.querySelector('[data-finance-message]');
   function error(e){message=e.message;const n=notice();if(n){n.hidden=false;n.textContent=message;n.scrollIntoView({block:'nearest'});}}
-  const canLoad=()=>root.isConnected&&!root.busy&&!confirm&&canRefresh();
+  const canLoad=()=>root.isConnected&&!root.busy&&!confirm&&!layout.arranging()&&canRefresh();
   root.seenAccounts=session.versions?.accounts;
   root.openReceipt=id=>{root.querySelector('[data-receipt-id="'+CSS.escape(id)+'"]')?.scrollIntoView({block:'nearest'});};
   function seen(){root.seenRevision=state.revision;root.seenDay=state.day;}
@@ -99,10 +101,24 @@ export async function mountFinance(root,session,{request,onSaved,onClean,canRefr
     const hero=root.querySelector('[data-calc-hero]'),recent=root.querySelector('.calc-recent');
     if(hero)hero.outerHTML=heroHtml();if(recent)recent.outerHTML=recentHtml();
     bindEntries();root.querySelector('[data-export]')?.addEventListener('click',exportCsv);
+    layout.apply(root);
+  }
+  // The arrange controls describe the mode they will switch to, so the label changes with the mode.
+  function syncArrangeBar(){
+    const bar=root.querySelector('[data-arrange-bar]');if(!bar)return;
+    const on=layout.arranging();
+    bar.classList.toggle('is-arranging',on);
+    const toggle=bar.querySelector('[data-arrange]');
+    if(toggle)toggle.textContent=on?'Done arranging':'Arrange panels';
+    const reset=bar.querySelector('[data-arrange-reset]');
+    if(reset)reset.hidden=!on&&!layout.customised();
+    const hint=bar.querySelector('[data-arrange-hint]');
+    if(hint)hint.hidden=!on;
   }
   function ownPage(){
     const enter=entered?'':' calc-enter';entered=true;
-    return '<div class="calc-page'+enter+'"><div class="page-heading"><div><span class="eyebrow">PTO</span><h1>Band calculator</h1><p>Count your bands, save the total, keep a running tally.</p></div></div>'+heroHtml()+'<div class="calc-workspace">'+countHtml()+'<div class="calc-side">'+scanHtml()+mathHtml()+recentHtml()+'</div></div></div>';
+    const arrangeBar='<div class="calc-arrange-bar" data-arrange-bar><button type="button" class="text-button" data-arrange>Arrange panels</button><button type="button" class="text-button" data-arrange-reset hidden>Reset layout</button><small data-arrange-hint hidden>Drag a panel by its name. Pull the right or bottom edge to resize it.</small></div>';
+    return '<div class="calc-page'+enter+'"><div class="page-heading"><div><span class="eyebrow">PTO</span><h1>Band calculator</h1><p>Count your bands, save the total, keep a running tally.</p></div>'+arrangeBar+'</div>'+heroHtml()+'<div class="calc-workspace">'+countHtml()+'<div class="calc-side">'+scanHtml()+mathHtml()+recentHtml()+'</div></div></div>';
   }
   function growNote(note){note.style.height='auto';note.style.height=Math.min(220,note.scrollHeight)+'px';note.style.overflowY=note.scrollHeight>220?'auto':'hidden';}
   function bindQuantityFields(form){
@@ -288,6 +304,10 @@ export async function mountFinance(root,session,{request,onSaved,onClean,canRefr
     const math=root.querySelector('[data-calc-math]');if(math){quickMath.bind(math);math.addEventListener('toggle',()=>{mathOpen=math.open;saveUiPreference(sectionKey('math'),mathOpen?'open':'closed');if(math.open)math.querySelector('[data-quick-math]')?.focus({preventScroll:true});});}
     root.querySelector('[data-export]')?.addEventListener('click',exportCsv);
     bindEntries();
+    layout.apply(root);layout.bind(root);
+    root.querySelector('[data-arrange]')?.addEventListener('click',()=>layout.setArranging(!layout.arranging()));
+    root.querySelector('[data-arrange-reset]')?.addEventListener('click',()=>layout.reset());
+    syncArrangeBar();
   }
   try{state=await request('/api/finance');if(!root.isConnected)return;seen();render();}catch(e){root.innerHTML='<p class="notice error">'+esc(e.message)+'</p>';}
 }

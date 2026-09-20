@@ -21,7 +21,7 @@ Append these routes to the intended origin; never switch between origins without
 
 | Page | Hash | Stable controls |
 | --- | --- | --- |
-| Calculator | `#/stash` | `.finance-main-nav [data-page="overview"]`, `[data-finance-quantity]`, `[data-calc-hero]` |
+| Calculator | `#/stash` | `.finance-main-nav [data-page="overview"]`, `[data-finance-quantity]`, `[data-calc-hero]`, `[data-arrange]`, `[data-grip]` |
 | Accounts & access | `#/admin` | `.admin-nav [data-page="access"]`, `[data-access-tab]` |
 | Join requests | `#/requests` | `.admin-nav [data-page="requests"]` |
 | Settings & backups | `#/settings` | `.admin-nav [data-page="settings"]`, `#settings-form`, `[data-setting-band]` |
