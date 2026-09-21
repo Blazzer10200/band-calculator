@@ -22,9 +22,17 @@ Shared business logic lives in `*-model.js`. Both API adapters (`dev-api.mjs`, `
 app.js                 routes (routeNames, followRoute, render), header, page mounting
 finance-ui.js          Calculator screen (mountFinance, mode 'bands'): counts, scanner, quick math
 band-scan.js           screenshot OCR (ocr-engine/ocr-worker/ocr-core + eng.traineddata.gz, vendored Tesseract).
-                       Pass 1 finds "<Color> Stack" names on the whole image; pass 2 crops each slot, stretches
-                       contrast per row (median = background, so grey hotbar slots read), reads "xN" + weight and
-                       cross-checks them (100 g per band, violet 200 g). Unit votes only accept multiples of 10.
+                       Three passes. Pass 1 sweeps the whole image for "<Color> Stack" names and is used only to
+                       locate slots. Those names feed `lattice()`, which infers the slot grid; pass 2 re-reads every
+                       cell close up (this is what stops a slot vanishing). Pass 3 crops each slot's count row and
+                       reads "xN" + weight, cross-checking them (100 g per band, violet 200 g); slots that come back
+                       with neither get one retry at a tighter crop. Contrast is stretched per crop (median =
+                       background, so grey hotbar slots read) and long dark runs are painted out as slot borders.
+                       Unit votes only accept multiples of 10. Unreconcilable slot -> `qty:null`, surfaced as "?" by
+                       finance-ui; it never guesses. Grid lines within 2 name-heights are merged — the panel is drawn
+                       in perspective and the drift once split one row in two, double-counting every slot on it.
+                       Bench: `.local/scan/` (gitignored) — hand-counted TRUTH over 3 screenshots, `pto-scan-harness`
+                       in .claude/launch.json serves it on 4180. Run it before and after any scanner change.
 quick-math.js          plain calculator panel
 panel-layout.js        "Arrange panels" mode: drag/resize the calculator panels, saved per account.
                        Only active at 820px+; x/w are fractions of the workspace width, y/h are pixels.

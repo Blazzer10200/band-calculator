@@ -1,5 +1,47 @@
 # Workspace release — September 2026
 
+## September 21 — The screenshot scanner reads by the slot grid
+
+Frontend-only change. The backend is untouched, and screenshots are still read entirely on your own
+device — nothing is uploaded.
+
+### User-facing changes
+
+- **Counts are read off the slot grid, not off one pass over the picture.** The scanner used to read
+  the whole screenshot once and trust the result. It now uses that first look only to work out where
+  the slots are, then cuts out each slot and reads it close up on its own. Whole slots used to go
+  missing when two names ran together into one line; that is what stopped.
+- **A count it cannot read now says so.** Where the count and the stack weight cannot be reconciled,
+  the slot comes back blank and the panel shows "?" and "N counts not readable" for you to type in.
+  It no longer invents a number. A garbled slot could previously be read as a bare "100" and added to
+  your total as a hundred bands when it was a stack of ten.
+- **Kilograms with a lost decimal point are thrown away.** The panel always prints kilograms with two
+  decimals, so a reading like "100k" is a mangled "1.00 kg". Believing it turned ten bands into a
+  thousand.
+
+### Fixes
+
+- **A slot could be counted twice.** The game draws the inventory panel in perspective, so the names
+  inside one row sit a few pixels lower as you go across. The scanner read that drift as two separate
+  rows of slots and added up every slot on them twice: a pocket holding 44 White, 2 Blue and 9 Purple
+  came back as 84, 4 and 18. Grid lines closer together than a line of text are now recognised as one
+  row. This was the worst of the scanner's faults, because a doubled total looks perfectly normal on
+  screen.
+- A slot's border came through as one long dark bar and was read as a word, which could swallow the
+  count next to it.
+- A lone band with no count badge beside it is now understood as one, instead of being guessed at.
+- A band that never showed a readable count of its own falls back to what the rest of the screenshot
+  weighs per band, rather than being dropped.
+
+### Checks
+
+- Three real inventory screenshots, counted by hand, are read exactly: 505 of 505 bands and every
+  slot found, including a small cropped grab of eight slots. Before these changes the same three came
+  to 76.7%. Three screenshots is a narrow sample and the bench only catches what is in it, so a
+  screenshot the scanner gets wrong is still worth sending in.
+- Full test suite green at 99 tests, 13 of them new and covering the count parsing, the stack-size
+  learning and the grid inference.
+
 ## September 20 — Arrangeable panels, undo a payout, scanner and refresh fixes
 
 Frontend-only change. The backend is unchanged; undo uses the existing reversal endpoint.
