@@ -124,6 +124,17 @@ const cluster=(values,tol)=>{
   return groups.map(g=>g.reduce((a,b)=>a+b,0)/g.length);
 };
 const medianGap=v=>{const g=v.slice(1).map((x,i)=>x-v[i]).sort((a,b)=>a-b);return g.length?g[g.length>>1]:0;};
+// The panel is drawn in perspective, so names drift a few pixels down a row and a row of slots can come
+// back as two centres sitting almost on top of each other. Two lines of the grid far closer together
+// than the grid's own spacing are one line, and leaving them apart counted every slot on them twice.
+// The floor comes from the text height, not from the spacing of the centres: the duplicates are what
+// throws that spacing off in the first place. Real rows are at least 3 name-heights apart and real
+// columns at least 4, both checked below, so anything within 2 of its neighbour is the same line twice.
+const merge=(centres,minGap)=>{
+  const out=[centres[0]];
+  for(const c of centres.slice(1)){if(c-out.at(-1)<minGap)out[out.length-1]=(out.at(-1)+c)/2;else out.push(c);}
+  return out;
+};
 // Respace an axis evenly so a column or row that nothing was read from still gets a place - but only
 // when the centres really do line up, so an unusual layout keeps the positions that were measured.
 const evenly=(centres,pitch)=>{
@@ -134,7 +145,8 @@ const evenly=(centres,pitch)=>{
 };
 export function lattice(names,unit){
   if(names.length<4)return null;
-  const cols=cluster(names.map(n=>n.x0),unit*1.5),rows=cluster(names.map(n=>n.y0),unit*.8);
+  const lines=(values,tol)=>merge(cluster(values,tol),unit*2);
+  const cols=lines(names.map(n=>n.x0),unit*1.5),rows=lines(names.map(n=>n.y0),unit*.8);
   const colPitch=medianGap(cols),rowPitch=medianGap(rows);
   if(cols.length<2||rows.length<2||colPitch<4*unit||rowPitch<3*unit)return null;
   return {cols:evenly(cols,colPitch),rows:evenly(rows,rowPitch),colPitch,rowPitch};
@@ -144,8 +156,10 @@ export function lattice(names,unit){
 // the whole grid instead put the crop a text-height too high and cut the number off.
 export function gridCells(grid,names=[]){
   const middle=(vals,fallback)=>{const m=vals.sort((a,b)=>a-b);return m.length?m[m.length>>1]:fallback;};
-  const ys=grid.rows.map(y=>middle(names.filter(n=>Math.abs(n.y0-y)<grid.rowPitch*.5).map(n=>n.y0),y));
-  const xs=grid.cols.map(x=>middle(names.filter(n=>Math.abs(n.x0-x)<grid.colPitch*.5).map(n=>n.x0),x));
+  // Two grid lines can still land on the same names and come back as the same measured position, and
+  // one slot read twice is added up twice, so a position only ever gets one cell.
+  const ys=[...new Set(grid.rows.map(y=>middle(names.filter(n=>Math.abs(n.y0-y)<grid.rowPitch*.5).map(n=>n.y0),y)))];
+  const xs=[...new Set(grid.cols.map(x=>middle(names.filter(n=>Math.abs(n.x0-x)<grid.colPitch*.5).map(n=>n.x0),x)))];
   return ys.flatMap(y=>xs.map(x=>({x0:x,y0:y})));
 }
 export const cellAt=(grid,list,cell)=>list.find(n=>Math.abs(n.x0-cell.x0)<grid.colPitch*.5&&Math.abs(n.y0-cell.y0)<grid.rowPitch*.5);
@@ -316,8 +330,13 @@ export async function scanImage(file,bands,{onProgress}={}){
     onProgress?.({phase:'read',text:'Reading each slot…'});
     const texts=await readNames(worker,src,cells.map(cell=>nameRect(cell,grid,src.unit)));
     slots=[];
+    // One name the sweep measured belongs to one slot. If two cells both reach for it the grid has a
+    // line too many, and counting that slot on both is how a stack of ten became twenty.
+    const taken=new Set();
     cells.forEach((cell,i)=>{
       const text=texts[i],band=text&&matchBand(text,bands,aliases),prior=cellAt(grid,names,cell);
+      if(prior&&taken.has(prior))return;
+      if(prior)taken.add(prior);
       // Where the sweep did see the name, keep the box it measured: the count crop is cut relative to
       // it, and a real measurement beats a position averaged out of the grid by a few pixels.
       if(band)slots.push(prior?{...prior,band}:{text,x0:cell.x0,y0:cell.y0,x1:cell.x0+grid.colPitch,y1:cell.y0+src.unit,band});

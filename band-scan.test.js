@@ -92,6 +92,31 @@ test('the slots that were read pin down the grid, including a row nothing was re
   assert.deepEqual(cellAt(grid,names,{x0:50,y0:100}),{x0:50,y0:100});
 });
 
+test('a row whose names drift in perspective stays one row, not two',()=>{
+  // Real geometry off a cropped grab: within a row the names sit a few pixels apart because the panel
+  // is drawn in perspective. Read as two rows, every slot on them was counted twice - 44 bands came
+  // back as 84. Rows here are ~250 apart, so 355 and 384 cannot be two of them.
+  const unit=31,names=[
+    {x0:100,y0:355},{x0:400,y0:384},
+    {x0:100,y0:620},{x0:400,y0:650},
+    {x0:400,y0:880}
+  ];
+  const grid=lattice(names,unit);
+  assert.equal(grid.rows.length,3);
+  assert.equal(grid.cols.length,2);
+  assert.equal(gridCells(grid,names).length,6);
+});
+
+test('two grid lines that land on the same names give one cell, not two',()=>{
+  // Even if a line too many survives, a position only ever gets one cell: a slot read twice is added
+  // up twice, and a doubled total is worse than a missing one because nothing on screen looks wrong.
+  const grid={rows:[100,108],cols:[50,250],rowPitch:100,colPitch:200};
+  const names=[{x0:50,y0:100},{x0:250,y0:100}];
+  const cells=gridCells(grid,names);
+  assert.equal(cells.length,2);
+  assert.equal(new Set(cells.map(c=>c.x0+','+c.y0)).size,2);
+});
+
 test('an unusual layout is left alone rather than forced onto a grid',()=>{
   assert.equal(lattice([{x0:0,y0:0},{x0:10,y0:0},{x0:0,y0:10}],20),null);// too few names
   assert.equal(lattice([{x0:0,y0:0},{x0:5,y0:0},{x0:0,y0:5},{x0:5,y0:5}],20),null);// slots too close together
