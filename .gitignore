@@ -10,3 +10,5 @@ dist/
 .wrangler/
 .local/
 .claude/
+.dev.vars
+.dev.vars.*

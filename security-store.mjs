@@ -1,8 +1,10 @@
 import {auditDetails} from './audit-details.js';
 import {randomBytes,createHash} from 'node:crypto';
+import {Buffer} from 'node:buffer';
 import {newTotpSecret,matchingStep,seal,unseal,encryptBackup} from './security-crypto.mjs';
 import {permits,permissionsFor} from './access-model.js';
-import QRCode from 'qrcode';
+import QRCode from 'qrcode/lib/core/qrcode.js';
+import QRCodeSVG from 'qrcode/lib/renderer/svg-tag.js';
 export const failure=(message,status=400)=>Object.assign(Error(message),{status});
 export function securitySchema(db){
   db.exec(`CREATE TABLE IF NOT EXISTS account_security(user_id TEXT PRIMARY KEY REFERENCES users(id),secret TEXT,pending TEXT,pending_until INTEGER,last_step INTEGER NOT NULL DEFAULT -1);
@@ -70,7 +72,7 @@ export function createSecurity({db,key,auth,publicUser,newSession,config,audit,d
       await reauthenticate(request,body,user);if(enabled(user.id))throw failure('Two-factor is already enabled.');
       const secret=newTotpSecret();db.prepare('INSERT INTO account_security(user_id,pending,pending_until) VALUES(?,?,?) ON CONFLICT(user_id) DO UPDATE SET pending=excluded.pending,pending_until=excluded.pending_until').run(user.id,encrypt(secret),now()+600000);
       const uri=`otpauth://totp/${encodeURIComponent('Band Calculator:'+user.username)}?secret=${secret}&issuer=Band%20Calculator&algorithm=SHA1&digits=6&period=30`;
-      return json({secret,qr:await QRCode.toDataURL(uri,{width:220,margin:2,errorCorrectionLevel:'M'})});
+      return json({secret,qr:'data:image/svg+xml;base64,'+Buffer.from(QRCodeSVG.render(QRCode.create(uri,{errorCorrectionLevel:'M'}),{width:220,margin:2})).toString('base64')});
     }
     if(route==='/api/security/confirm'&&method==='POST'){
       limit('factor:'+user.id);const step=consumeTotp(user.id,body.code,true);if(step===false)throw failure('That code did not match. Check your authenticator or restart setup.');

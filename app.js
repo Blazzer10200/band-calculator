@@ -80,7 +80,7 @@ async function refreshSession(){await openWorkspace(await authRequest('/api/sess
 // Every sign-in path ends here with whatever the server said; ask again so the page always works from a full session.
 async function openWorkspace(result){
   session=result?.versions?result:await authRequest('/api/session');
-  if(!session.authenticated&&session.setupRequired){loginScreen(session,openWorkspace,'setup');return;}
+  if(!session.authenticated&&session.setupRequired&&!session.setupCode){loginScreen(session,openWorkspace,'setup');return;}
   if(session.security?.enrollmentRequired){securityGate(session,openWorkspace,authRequest);return;}
   page=routePage();history.replaceState({},'',pages[page].route);renderedPage='';render();
 }

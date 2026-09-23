@@ -1,16 +1,30 @@
 import {auditDocument} from './audit-details.js';
-import {DatabaseSync} from 'node:sqlite';
 import {randomBytes,createHash,scrypt as scryptCallback,timingSafeEqual} from 'node:crypto';
 import {promisify} from 'node:util';
+import {Buffer} from 'node:buffer';
 import {createSecurity,securitySchema,failure} from './security-store.mjs';
 import {unseal} from './security-crypto.mjs';
 import {DEFAULT_BANDS,cleanBands,dayOf,MAX_QTY,MAX_TOTAL} from './calc-model.js';
 // Calculator backend: public prices, instant accounts, per-user counts and cash-outs, Owner-only prices.
+// Runs on Node (node:sqlite) or inside a Cloudflare Durable Object, which passes its own db and transaction.
 const scrypt=promisify(scryptCallback),digest=value=>createHash('sha256').update(value).digest('hex');
 const json=(body,status=200,headers={})=>Response.json(body,{status,headers:{'Cache-Control':'no-store','X-Content-Type-Options':'nosniff',...headers}});
 const publicUser=user=>({id:user.id,name:user.name,username:user.username,owner:!!user.owner,disabled:!!user.disabled,approval:user.approval,createdAt:user.requested_at||null,mfaVerified:!!user.mfa_verified,remembered:!!user.session_remember});
-async function hashPassword(password,salt=randomBytes(16).toString('hex')){return salt+':'+Buffer.from(await scrypt(password,salt,64,{N:32768,r:8,p:3,maxmem:64*1024*1024})).toString('hex');}
-async function verifyPassword(password,stored){const [salt,hash]=stored.split(':');const result=await hashPassword(password,salt);return timingSafeEqual(Buffer.from(result.split(':')[1],'hex'),Buffer.from(hash,'hex'));}
+// Untagged hashes use the original strong settings. Lighter settings (Cloudflare's free CPU budget) are tagged "sN.r.p$" so either verifies.
+const STRONG_HASH={N:32768,r:8,p:3},HASH_TAG=/^s(\d{1,5})\.(\d{1,2})\.(\d{1,2})\$/;
+export const PASSWORD_HASH=/^(s\d{1,5}\.\d{1,2}\.\d{1,2}\$)?[0-9a-f]{32}:[0-9a-f]{128}$/;
+function passwords({N,r,p}=STRONG_HASH){
+  const prefix=N===STRONG_HASH.N&&r===STRONG_HASH.r&&p===STRONG_HASH.p?'':`s${N}.${r}.${p}$`;
+  const derive=async(password,salt,params)=>Buffer.from(await scrypt(password,salt,64,{...params,maxmem:64*1024*1024}));
+  const hashPassword=async(password,salt=randomBytes(16).toString('hex'))=>prefix+salt+':'+(await derive(password,salt,{N,r,p})).toString('hex');
+  async function verifyPassword(password,stored){
+    const tag=stored.match(HASH_TAG),[salt,hash]=stored.slice(tag?tag[0].length:0).split(':');
+    if(tag&&Number(tag[1])>STRONG_HASH.N)return false;
+    return timingSafeEqual(await derive(password,salt,tag?{N:Number(tag[1]),r:Number(tag[2]),p:Number(tag[3])}:STRONG_HASH),Buffer.from(hash,'hex'));
+  }
+  // Unknown usernames still pay for one hash at the current settings, so timing does not reveal which names exist.
+  return {hashPassword,verifyPassword,decoy:prefix+'0'.repeat(32)+':'+'00'.repeat(64)};
+}
 const validatePassword=value=>{if(typeof value!=='string'||value.length<12||value.length>128)throw Error('Use a password between 12 and 128 characters.');};
 const validUsername=body=>{const username=typeof body.username==='string'?body.username.trim().toLowerCase():'';if(!/^[a-z0-9_.-]{3,32}$/.test(username))throw Error('Pick a username of 3–32 letters, numbers, dots, underscores, or hyphens.');return username;};
 const validName=value=>{const name=typeof value==='string'?value.trim():'';if(!name||name.length>60)throw Error('Use a display name of up to 60 characters.');return name;};
@@ -18,8 +32,7 @@ const validId=value=>typeof value==='string'&&/^[A-Za-z0-9_-]{8,80}$/.test(value
 const USER_COLUMNS='id,name,email,password,owner,disabled,roles,username,approval,requested_at';
 const TABLES=['users','audit','account_security','recovery_codes','security_policy','meta','bands','counts','cashouts','revisions'];
 function schema(db){
-  db.exec(`PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;
-    CREATE TABLE IF NOT EXISTS users(id TEXT PRIMARY KEY,name TEXT NOT NULL,email TEXT UNIQUE NOT NULL,password TEXT NOT NULL,owner INTEGER NOT NULL DEFAULT 0,disabled INTEGER NOT NULL DEFAULT 0,roles TEXT NOT NULL DEFAULT '[]');
+  db.exec(`CREATE TABLE IF NOT EXISTS users(id TEXT PRIMARY KEY,name TEXT NOT NULL,email TEXT UNIQUE NOT NULL,password TEXT NOT NULL,owner INTEGER NOT NULL DEFAULT 0,disabled INTEGER NOT NULL DEFAULT 0,roles TEXT NOT NULL DEFAULT '[]');
     CREATE UNIQUE INDEX IF NOT EXISTS one_owner ON users(owner) WHERE owner=1;
     CREATE TABLE IF NOT EXISTS sessions(hash TEXT PRIMARY KEY,user_id TEXT NOT NULL REFERENCES users(id),expires INTEGER NOT NULL);
     CREATE TABLE IF NOT EXISTS audit(id INTEGER PRIMARY KEY,at TEXT NOT NULL,user_id TEXT NOT NULL,action TEXT NOT NULL,document TEXT);
@@ -36,12 +49,11 @@ function schema(db){
   securitySchema(db);
 }
 // One time: copy prices and deposits out of the old single-document workspace. Old tables stay untouched.
-function importLegacy(db,seedBands){
+function importLegacy(db,seedBands,tx){
   if(db.prepare("SELECT value FROM meta WHERE key='import_v1'").get())return;
   const hasWorkspace=db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='workspace'").get();
   const doc=hasWorkspace?JSON.parse(db.prepare('SELECT document FROM workspace WHERE id=1').get()?.document||'null'):null;
-  db.exec('BEGIN IMMEDIATE');
-  try{
+  tx(()=>{
     const bands=Array.isArray(doc?.bands)&&doc.bands.length?doc.bands:seedBands;
     if(!db.prepare('SELECT id FROM bands LIMIT 1').get())bands.forEach((b,i)=>db.prepare('INSERT INTO bands VALUES(?,?,?,?,?,?)').run(b.id,b.name,b.color.toLowerCase(),b.price,Number(b.active!==false),i));
     const finance=doc?.finance,users=new Set(db.prepare('SELECT id FROM users').all().map(u=>u.id));
@@ -63,15 +75,21 @@ function importLegacy(db,seedBands){
     db.exec("UPDATE users SET approval='approved' WHERE approval<>'approved'");
     db.prepare("INSERT OR IGNORE INTO meta VALUES('prices_revision','1')").run();
     db.prepare("INSERT INTO meta VALUES('import_v1',?)").run(new Date().toISOString());
-    db.exec('COMMIT');
-  }catch(error){if(db.isTransaction)db.exec('ROLLBACK');throw error;}
+  });
 }
-export function createApi({file=':memory:',bands=DEFAULT_BANDS,key,now=Date.now,backupStatus=()=>({enabled:false}),cookieName='pto_session',local=true}={}){
+function openSqlite(file){
+  const db=new (process.getBuiltinModule('node:sqlite').DatabaseSync)(file);
+  db.exec('PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;');
+  const transaction=work=>{db.exec('BEGIN IMMEDIATE');try{const result=work();db.exec('COMMIT');return result;}catch(error){if(db.isTransaction)db.exec('ROLLBACK');throw error;}};
+  return {db,transaction};
+}
+// setupCode: when set, creating the Owner account also needs this code (a public server must not let a stranger claim it first).
+export function createApi({file=':memory:',storage,bands=DEFAULT_BANDS,key,now=Date.now,backupStatus=()=>({enabled:false}),cookieName='pto_session',local=true,hash,setupCode=''}={}){
   if(!/^[a-zA-Z0-9_-]{1,80}$/.test(cookieName))throw Error('Invalid session cookie name.');
-  if(!key&&file!==':memory:')throw Error('A persistent encryption key is required for this database.');
+  if(!key&&(storage||file!==':memory:'))throw Error('A persistent encryption key is required for this database.');
   key=key||randomBytes(32);
-  const db=new DatabaseSync(file);
-  schema(db);importLegacy(db,bands);
+  const {db,transaction:tx}=storage||openSqlite(file),{hashPassword,verifyPassword,decoy}=passwords(hash);
+  schema(db);importLegacy(db,bands,tx);
   const pricesRevision=()=>Number(db.prepare("SELECT value FROM meta WHERE key='prices_revision'").get().value);
   const countsRevision=id=>db.prepare('SELECT n FROM revisions WHERE user_id=?').get(id)?.n||0;
   const bump=id=>db.prepare('INSERT INTO revisions VALUES(?,1) ON CONFLICT(user_id) DO UPDATE SET n=n+1').run(id);
@@ -82,8 +100,8 @@ export function createApi({file=':memory:',bands=DEFAULT_BANDS,key,now=Date.now,
     const session=db.prepare('SELECT users.*,sessions.mfa_verified,sessions.remember AS session_remember FROM sessions JOIN users ON users.id=sessions.user_id WHERE sessions.hash=? AND sessions.expires>? AND users.disabled=0').get(digest(cookieToken(request)),now());
     return session?publicUser(session):null;
   };
-  const guestData=()=>({authenticated:false,setupRequired:!db.prepare('SELECT id FROM users LIMIT 1').get(),versions:{prices:pricesRevision()},development:true});
-  const sessionData=user=>({authenticated:true,user,security:security.state(user),versions:{prices:pricesRevision(),counts:countsRevision(user.id)},development:true});
+  const guestData=()=>({authenticated:false,setupRequired:!db.prepare('SELECT id FROM users LIMIT 1').get(),...(setupCode?{setupCode:true}:{}),versions:{prices:pricesRevision()},development:local});
+  const sessionData=user=>({authenticated:true,user,security:security.state(user),versions:{prices:pricesRevision(),counts:countsRevision(user.id)},development:local});
   const newSession=(user,verified=false,remember=!!user.remembered)=>{
     db.prepare('DELETE FROM sessions WHERE expires<=?').run(now());
     const token=randomBytes(32).toString('base64url');db.prepare('INSERT INTO sessions(hash,user_id,expires,mfa_verified,remember) VALUES(?,?,?,?,?)').run(digest(token),user.id,now()+(remember?2592000000:43200000),Number(verified),Number(remember));
@@ -96,7 +114,6 @@ export function createApi({file=':memory:',bands=DEFAULT_BANDS,key,now=Date.now,
   const me=user=>({day:dayOf(now()),pricesRevision:pricesRevision(),countsRevision:countsRevision(user.id),bands:bandRows(),
     counts:db.prepare('SELECT * FROM counts WHERE user_id=? AND removed_at IS NULL ORDER BY at DESC').all(user.id).map(countOf),
     cashouts:db.prepare('SELECT id,at,amount FROM cashouts WHERE user_id=? AND undone_at IS NULL ORDER BY at DESC').all(user.id)});
-  const tx=work=>{db.exec('BEGIN IMMEDIATE');try{const result=work();db.exec('COMMIT');return result;}catch(error){if(db.isTransaction)db.exec('ROLLBACK');throw error;}};
   async function handle(request,{remoteAddress='local'}={}){
     const url=new URL(request.url),route=url.pathname,method=request.method;
     if(local&&!['127.0.0.1','localhost','[::1]'].includes(url.hostname))return json({error:'Development API is local only.'},403);
@@ -119,6 +136,7 @@ export function createApi({file=':memory:',bands=DEFAULT_BANDS,key,now=Date.now,
         if(setup&&db.prepare('SELECT id FROM users LIMIT 1').get())return json({error:'The Owner account is already set up.'},409);
         if(!setup&&!db.prepare('SELECT id FROM users WHERE owner=1').get())return json({error:'The Owner must finish website setup first.'},409);
         security.limit((setup?'setup:':'register:')+remoteAddress,setup?5:10);
+        if(setup&&setupCode&&(typeof body.setupCode!=='string'||!timingSafeEqual(Buffer.from(digest(body.setupCode.trim()),'hex'),Buffer.from(digest(setupCode),'hex'))))return json({error:'That setup code is not right.'},403);
         const username=validUsername(body),name=body.name===undefined?username:validName(body.name);validatePassword(body.password);
         if(db.prepare('SELECT id FROM users WHERE username=? COLLATE NOCASE').get(username))return json({error:'That username is already taken.'},409);
         const password=await security.work(()=>hashPassword(body.password)),id=crypto.randomUUID();
@@ -134,7 +152,7 @@ export function createApi({file=':memory:',bands=DEFAULT_BANDS,key,now=Date.now,
         const login=typeof body.username==='string'?body.username.trim().toLowerCase():'';
         const row=db.prepare('SELECT * FROM users WHERE username=? COLLATE NOCASE OR email=?').get(login,login);
         const bucket='login:'+(row?.id||login);security.limit('ip:'+remoteAddress,120);security.limit(bucket);
-        const valid=typeof body.password==='string'&&body.password.length<=128&&await security.work(()=>verifyPassword(body.password,row?.password||'00000000000000000000000000000000:'+'00'.repeat(64)));
+        const valid=typeof body.password==='string'&&body.password.length<=128&&await security.work(()=>verifyPassword(body.password,row?.password||decoy));
         const current=row&&db.prepare('SELECT * FROM users WHERE id=?').get(row.id);
         if(!valid||!current||current.disabled||current.password!==row.password){if(current)audit(current.id,'Failed sign-in');return json({error:'Username or password is incorrect, or the account is disabled.'},401);}
         security.clear(bucket);if(security.enabled(current.id))return security.challenge(current,body.remember===true);
@@ -249,7 +267,7 @@ export function restoreSnapshot(document,{file=':memory:',...options}={}){
   if(!tables||TABLES.some(name=>!Array.isArray(tables[name])))throw Error('Incomplete backup.');
   if(tables.users.filter(u=>u.owner===1).length!==1)throw Error('Backup must contain one Owner.');
   if(tables.security_policy.length!==1||!tables.meta.some(m=>m.key==='prices_revision'))throw Error('Invalid backup state.');
-  for(const user of tables.users)if(!/^[0-9a-f]{32}:[0-9a-f]{128}$/.test(user.password))throw Error('Invalid account in backup.');
+  for(const user of tables.users)if(!PASSWORD_HASH.test(user.password))throw Error('Invalid account in backup.');
   cleanBands(tables.bands.map(b=>({id:b.id,name:b.name,color:b.color,price:b.price,active:!!b.active})));
   for(const record of tables.account_security)if(record.secret)unseal(JSON.parse(record.secret),key);
   const api=createApi({file,key,...options});

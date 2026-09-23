@@ -1,0 +1,13 @@
+// Band Calculator accounts backend (Workers Free). Deploy: npm run cf:deploy. Secrets: BAND_KEY, SETUP_CODE (see README).
+{
+  "name": "band-calculator",
+  "main": "cloudflare-worker.mjs",
+  "compatibility_date": "2026-06-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+  "durable_objects": {
+    "bindings": [{"name": "BANDS", "class_name": "BandStore"}]
+  },
+  "migrations": [{"tag": "v1", "new_sqlite_classes": ["BandStore"]}],
+  "observability": {"enabled": true}
+}
