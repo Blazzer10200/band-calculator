@@ -23,7 +23,7 @@ const countBody=(me,quantities,extra={})=>({requestId:id(),pricesRevision:me.pri
 test('guests can read prices and the session but nothing personal',async t=>{
   const {api}=await fixture(t);
   const session=await call(api,'/api/session');assert.equal(session.body.authenticated,false);assert.equal(session.body.setupRequired,false);assert.equal(session.body.versions.prices,1);
-  const bands=await call(api,'/api/bands');assert.equal(bands.status,200);assert.equal(bands.body.bands.length,6);assert.ok(bands.body.bands.every(b=>b.price>0&&b.active));
+  const bands=await call(api,'/api/bands');assert.equal(bands.status,200);assert.equal(bands.body.bands.length,7);assert.ok(bands.body.bands.every(b=>b.price>0&&b.active));
   for(const [route,method,body] of [['/api/me','GET'],['/api/counts','POST',{requestId:id()}],['/api/admin/bands','GET'],['/api/admin/users','GET']])assert.equal((await call(api,route,method,body)).status,401);
 });
 

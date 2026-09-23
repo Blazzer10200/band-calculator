@@ -8,7 +8,7 @@ export const addDays=(day,n)=>{const d=new Date(day+'T12:00:00Z');d.setUTCDate(d
 export const weekStart=day=>addDays(day,-((new Date(day+'T12:00:00Z').getUTCDay()+3)%7));
 export const countTotal=count=>count.lines.reduce((n,l)=>n+l.quantity*l.price,0);
 export const MAX_QTY=1000000,MAX_PRICE=100000000000,MAX_TOTAL=100000000000000;
-export const DEFAULT_BANDS=[['Loose change','#c2c9b5',2500],['White band','#e4e5e0',10000],['Blue band','#82aef5',150000],['Purple band','#ba98e4',250000],['Brown band','#b28b6f',600000],['Yellow band','#f2e23a',1250000]].map(([name,color,price],i)=>({id:'band-'+i,name,color,price,active:true}));
+export const DEFAULT_BANDS=[['Loose change','#c2c9b5',2500],['White band','#e4e5e0',10000],['Blue band','#82aef5',150000],['Purple band','#ba98e4',250000],['Brown band','#b28b6f',600000],['Yellow band','#f2e23a',1250000],['Violet band','#8b5cf6',2500000]].map(([name,color,price],i)=>({id:'band-'+i,name,color,price,active:true}));
 export function cleanBands(list){
   if(!Array.isArray(list)||!list.length||list.length>40)throw Error('Keep between 1 and 40 bands.');
   const ids=new Set(),names=new Set();
