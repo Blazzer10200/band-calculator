@@ -9,6 +9,7 @@ import {mountAdmin} from './admin-ui.js';
 import {authRequest,loginScreen,accountDialog} from './auth-ui.js';
 import {securityGate,securityNudge,dismissSecurityNudge} from './security-ui.js';
 import {accountMenu,dismissAccountMenu} from './ui-shell.js';
+import {standalone} from './api-config.js';
 
 const $=selector=>document.querySelector(selector);
 installSelectMenus();
@@ -24,7 +25,7 @@ const hasOpenModal=()=>!!$('#modal')?.open;
 const canApplyRemote=()=>!pageDirty&&!hasOpenModal()&&!panel()?.busy&&!$('.select-menu.is-open');
 function toast(message){$('#toast').textContent=message;$('#toast').classList.add('visible');clearTimeout(toast.timer);toast.timer=setTimeout(()=>$('#toast').classList.remove('visible'),4000);}
 function syncMessage(message=''){const note=$('#live-sync-note');if(note){note.hidden=!message;note.textContent=message;}}
-const storageLabel=()=>signedIn()?'Counts save to your account':'Calculator only · sign in to save counts';
+const storageLabel=()=>standalone?'Runs in your browser · nothing is uploaded':signedIn()?'Counts save to your account':'Calculator only · sign in to save counts';
 document.addEventListener('click',dismissAccountMenu);
 document.addEventListener('keydown',dismissAccountMenu);
 document.addEventListener('focusin',dismissAccountMenu);
@@ -40,7 +41,7 @@ window.addEventListener('hashchange',followRoute);
 window.addEventListener('beforeunload',e=>{if(pageDirty||panel()?.busy){e.preventDefault();e.returnValue='';}});
 function header(){
   const nav=Object.keys(pages).filter(allowed);
-  const right=signedIn()?accountMenu(session):'<div class="guest-actions"><button type="button" class="text-button" data-action="login">Sign in</button><button type="button" class="button primary" data-action="register">Create account</button></div>';
+  const right=standalone?'':signedIn()?accountMenu(session):'<div class="guest-actions"><button type="button" class="text-button" data-action="login">Sign in</button><button type="button" class="button primary" data-action="register">Create account</button></div>';
   return `<header class="simple-header finance-header"><div class="header-top"><a class="brand" href="#/" data-page="calculator"><img class="finance-logo" src="./logo.svg" alt="" width="40" height="40"><span>Band Calculator</span></a>${right}</div>${nav.length>1?`<nav class="finance-main-nav" aria-label="Main navigation">${nav.map(id=>`<a href="${pages[id].route}" data-page="${id}" class="simple-nav ${page===id?'active':''}" ${page===id?'aria-current="page"':''}>${icon(pages[id].icon,16)}<span>${pages[id].label}</span></a>`).join('')}</nav>`:''}</header>`;
 }
 function render(){
@@ -84,7 +85,7 @@ async function openWorkspace(result){
   page=routePage();history.replaceState({},'',pages[page].route);renderedPage='';render();
 }
 async function pollSession(){
-  if(syncBusy||!session||document.visibilityState!=='visible'||!$('#main-content')||document.querySelector('[data-security-sensitive]'))return;
+  if(standalone||syncBusy||!session||document.visibilityState!=='visible'||!$('#main-content')||document.querySelector('[data-security-sensitive]'))return;
   syncBusy=true;
   try{
     const previous=session,updated=await authRequest('/api/session');
@@ -121,7 +122,7 @@ $('#modal').addEventListener('close',pollSession);
 setTimeout(schedulePoll,4000);
 async function start(){
   $('#app').innerHTML='<div class="startup"><h1>Band Calculator</h1><p>Loading…</p></div>';
-  try{await openWorkspace(await authRequest('/api/session'));}
+  try{await openWorkspace(standalone?{authenticated:false,standalone:true,versions:{}}:await authRequest('/api/session'));}
   catch{$('#app').innerHTML='<div class="startup"><h1>Unable to load the calculator</h1><p>Check your connection, then try again.</p><button class="button primary" data-action="reload">Try again</button></div>';}
 }
 start();

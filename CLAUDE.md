@@ -11,7 +11,10 @@ Browser (index.html + *.js/*.css, served from disk)
   └─ api-config.js picks the backend by hostname
        ├─ api.mjs → server.mjs → SQLite .local/pto-dev.sqlite          (localhost:4173, YOUR private data)
        ├─ api.mjs → scripts/sample-server.mjs → in-memory fake data     (localhost:4174, disposable)
-       └─ cloud-api.mjs → worker.js → Cloudflare D1                     (production, NOT ported yet: still the old roster/finance API)
+       └─ cloud-api.mjs → worker.js → Cloudflare D1                     (ChatGPT Sites, RETIRED 2026-09-22: old roster API, unused)
+GitHub Pages build (dist/pages): <meta name="band-standalone"> → no server at all. DEFAULT_BANDS prices,
+  no account UI, no polling. `standalone` in api-config.js; `session.standalone` in calculator-ui.js.
+  User decision 2026-09-22: Pages only, no ChatGPT Sites. A half-done Worker port is in `git stash` ("WIP: Worker backend port").
 ```
 
 `api.mjs` is the new backend. On first start against an old database it imports bands, deposits (as counts) and payouts (as cash-outs) once (`meta.import_v1`). `calc-model.js` is shared by the browser and `api.mjs`. The legacy `dev-api.mjs` + `*-model.js` + `finance-*` modules stay on disk only because `cloud-api.mjs`, the legacy tests and `import_v1` tests use them. The browser no longer loads them.
@@ -94,7 +97,7 @@ CSS/copy-only change: inspect the page at phone + desktop width, then `git diff 
 - **Never add a login bypass, dev-only credential, or test route.** Use the sample server for other roles.
 - **4173 is real data.** No test transactions there. Don't restart it or sign the user out just to check something.
 - **No secrets in the repo.** `.local/` holds credentials and baselines. Don't print, copy, or screenshot them.
-- **Don't publish the Pages frontend from this branch** until `cloud-api.mjs`/`worker.js` serve the `api.mjs` endpoints: the new browser code would call routes production doesn't have.
+- Pages prices come from `DEFAULT_BANDS` in `calc-model.js`; a price change on the live site = edit it + republish. Test the Pages build locally with `pages-preview` (launch.json, port 4190, serves `dist/pages`).
 - Money is integer cents. Each saved count snapshots band name/color/price per line; price edits never rewrite history. Saves carry `pricesRevision`, stale ones get 409.
 - Deploy only files named in `release.json` from a fresh staging dir.
 - `HANDOFF.md` and `WEBSITE-REVIEW.md` are deliberately untracked (private ops notes). Keep them that way.
