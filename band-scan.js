@@ -229,7 +229,8 @@ export function parseRow({left,right}){
   // Small digits come back as look-alike letters now and then: S00 g, x1O, l.00 kg.
   const fix=s=>s.toLowerCase().replace(/[s$]/g,'5').replace(/[od]/g,'0').replace(/[li|]/g,'1').replace(/b/g,'8').replace(/,/g,'.');
   const l=fix(left),r=fix(right);
-  const count=l.match(/x\s*(\d{1,4})/);
+  // A big stack can carry a thousands separator ("x1,250"), which fix() has just made a point.
+  const count=l.match(/x\s*(\d{1,3}(?:\.\d{3})+|\d{1,4})/);
   const weight=r.match(/(\d+(?:\.\d+)?)/);
   let grams=null;
   // Kilograms are always printed with two decimals ("1.00 kg", "13.50 kg") and grams always whole, so a
@@ -242,7 +243,7 @@ export function parseRow({left,right}){
   }
   // The game draws no count at all for a single item, so a count corner with nothing in it is itself
   // the answer - and it is what tells a lone 200 g band apart from a garbled stack of them.
-  return {n:count?Number(count[1]):null,grams,bare:!left.trim()};
+  return {n:count?Number(count[1].replace(/\./g,'')):null,grams,bare:!left.trim()};
 }
 // Grams per item for a band, learned from any slot that showed both a count and a weight - or from a
 // single item, whose whole weight is one item's worth.
@@ -259,6 +260,10 @@ export function inferUnits(rows,known={}){
   for(const [bandId,v] of Object.entries(counted))units[bandId]=top(v);// a counted stack outranks a lone item
   return units;
 }
+// Two items do not weigh what a band weighs, and that is a fact of the game rather than something to
+// learn: Loose Change is 50 g a piece (x24 = 1.20 kg) and a Violet Stack 200 g. Borrowing the 100 g of
+// the bands around it read "x2  100 g" of loose change as one, and called it sure.
+export const usualUnit=name=>/loose|change|coin/i.test(name)?50:/violet/i.test(name)?200:null;
 // Bands in one screenshot nearly all weigh the same per item, so when a band never showed a readable
 // count of its own, what the rest of the screenshot weighs is a better guess than giving up on it.
 export function commonUnit(rows){
@@ -272,7 +277,9 @@ export function commonUnit(rows){
 // A count nobody can stand behind is worth less than an honest blank: qty null makes the screen say
 // "not readable" and the number gets typed in, instead of a wrong one being added up in silence.
 const sane=q=>Number.isFinite(q)&&q>=1&&q<=9999;
-export function resolveCount({n,grams,bare},unit){
+// `borrowed` means the unit is the rest of the screenshot's, not this band's own: good enough to
+// suggest a number, not to vouch for it.
+export function resolveCount({n,grams,bare},unit,borrowed=false){
   const weighed=grams&&unit?grams/unit:null;
   if(n===null&&bare&&grams)return {qty:1,sure:true};// an empty count corner beside a weight means one
   if(n!==null){
@@ -282,7 +289,7 @@ export function resolveCount({n,grams,bare},unit){
     const q=Math.round(weighed);// they disagree: the weight is the bigger, cleaner text, so it wins
     return sane(q)?{qty:q,sure:false}:sane(n)?{qty:n,sure:false}:{qty:null,sure:false};
   }
-  if(weighed!==null){const q=Math.round(weighed);return sane(q)?{qty:q,sure:Math.abs(weighed-q)<.05}:{qty:null,sure:false};}
+  if(weighed!==null){const q=Math.round(weighed);return sane(q)?{qty:q,sure:!borrowed&&Math.abs(weighed-q)<.05}:{qty:null,sure:false};}
   if(grams)return {qty:1,sure:false};// nothing is drawn for a single item, so a weight alone means one
   return {qty:null,sure:false};
 }
@@ -362,8 +369,9 @@ export async function scanImage(file,bands,{onProgress}={}){
       });
     }
     const units=inferUnits(rows,readJson(UNIT_KEY));writeJson(UNIT_KEY,units);
-    const shared=commonUnit(rows);
-    items=rows.map((row,i)=>{const {qty,sure}=resolveCount(row,units[row.bandId]||shared),line=slots[i];return {text:line.text,bandId:line.band.id,name:line.band.name,qty,sure,raw:row.text,x:Math.round(line.x0/src.scale),y:Math.round(line.y0/src.scale)};});
+    const fixed=Object.fromEntries(bands.map(b=>[b.id,usualUnit(b.name)]));
+    const shared=commonUnit(rows.filter(r=>!fixed[r.bandId]));
+    items=rows.map((row,i)=>{const own=fixed[row.bandId]||units[row.bandId],{qty,sure}=resolveCount(row,own||shared,!own),line=slots[i];return {text:line.text,bandId:line.band.id,name:line.band.name,qty,sure,raw:row.text,x:Math.round(line.x0/src.scale),y:Math.round(line.y0/src.scale)};});
   }
   return {items,others,ms:Math.round(performance.now()-started)};
   }finally{src.canvas.width=src.canvas.height=0;src.bitmap?.close?.();}

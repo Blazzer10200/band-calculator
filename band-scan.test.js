@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 // The vendored OCR engine looks for a worker global the moment it loads; nothing below ever runs it.
 globalThis.self??=globalThis;
-const {parseRow,resolveCount,inferUnits,commonUnit,matchBand,normalizeName,lattice,gridCells,cellAt}=await import('./band-scan.js');
+const {parseRow,resolveCount,inferUnits,commonUnit,usualUnit,matchBand,normalizeName,lattice,gridCells,cellAt}=await import('./band-scan.js');
 
 const BANDS=[
   {id:'band-1',name:'White band',price:10000,active:true},
@@ -68,6 +68,23 @@ test('the grams per band are learned from whatever the screenshot showed',()=>{
 test('a band that never showed a count falls back to what the rest of the screenshot weighs',()=>{
   assert.equal(commonUnit([{n:10,grams:1000,bare:false},{n:5,grams:500,bare:false}]),100);
   assert.equal(commonUnit([{n:null,grams:null,bare:false}]),null);
+  // Borrowed from other bands, the weight suggests a number but does not vouch for it.
+  assert.deepEqual(resolveCount({n:null,grams:300,bare:false},100,true),{qty:3,sure:false});
+});
+
+test('loose change weighs half a band and a violet stack double, whatever the rest of the shot weighs',()=>{
+  assert.equal(usualUnit('Loose change'),50);
+  assert.equal(usualUnit('Violet band'),200);
+  assert.equal(usualUnit('White band'),null);
+  // "x2  100 g" of loose change with the x lost: 100 g is two coins' worth, not one band's.
+  assert.deepEqual(resolveCount(parseRow({left:'2',right:'100g'}),usualUnit('Loose change')),{qty:2,sure:true});
+  assert.deepEqual(resolveCount(parseRow({left:'x24',right:'1.20 kg'}),usualUnit('Loose change')),{qty:24,sure:true});
+});
+
+test('a big stack keeps its thousands separator out of the count',()=>{
+  assert.equal(parseRow({left:'x1,250',right:''}).n,1250);
+  assert.equal(parseRow({left:'x1.250',right:''}).n,1250);
+  assert.equal(parseRow({left:'x24',right:''}).n,24);
 });
 
 test('band names match the game wording, not the settings wording',()=>{
