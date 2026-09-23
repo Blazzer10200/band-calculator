@@ -8,13 +8,17 @@ FiveM band calculator, calculator-first since 2026-09-22 (branch `calculator-onl
 
 ```text
 Browser (index.html + *.js/*.css, served from disk)
-  └─ api-config.js picks the backend by hostname
+  └─ api-config.js picks the backend from <meta> tags the build injects
        ├─ api.mjs → server.mjs → SQLite .local/pto-dev.sqlite          (localhost:4173, YOUR private data)
        ├─ api.mjs → scripts/sample-server.mjs → in-memory fake data     (localhost:4174, disposable)
+       ├─ api.mjs → cloudflare-worker.mjs (SQLite Durable Object) → band-calculator.blazzer.workers.dev   (PRODUCTION accounts)
        └─ cloud-api.mjs → worker.js → Cloudflare D1                     (ChatGPT Sites, RETIRED 2026-09-22: old roster API, unused)
-GitHub Pages build (dist/pages): <meta name="band-standalone"> → no server at all. DEFAULT_BANDS prices,
-  no account UI, no polling. `standalone` in api-config.js; `session.standalone` in calculator-ui.js.
-  User decision 2026-09-22: Pages only, no ChatGPT Sites. A half-done Worker port is in `git stash` ("WIP: Worker backend port").
+GitHub Pages build (dist/pages): <meta name="band-api"> = the Worker origin (also added to CSP connect-src).
+  cloudflare-edge.mjs: CORS for blazzer10200.github.io, SameSite=None;Partitioned cookie, bearer fallback via
+  X-PTO-Session (token in sessionStorage). BAND_API= (empty) builds the old calculator-only site (<meta band-standalone>).
+  Workers Free = ~10 ms CPU/request → WORKER_HASH scrypt N=4096 (tagged "s4096.8.1$"); untagged = strong local hashes.
+  Worker secrets: BAND_KEY (copy in .local/cloudflare-band-key.txt), SETUP_CODE (.local/cloudflare-setup-code.txt).
+  The stash "WIP: Worker backend port" is the abandoned cloud-api.mjs route; superseded, not needed.
 ```
 
 `api.mjs` is the new backend. On first start against an old database it imports bands, deposits (as counts) and payouts (as cash-outs) once (`meta.import_v1`). `calc-model.js` is shared by the browser and `api.mjs`. The legacy `dev-api.mjs` + `*-model.js` + `finance-*` modules stay on disk only because `cloud-api.mjs`, the legacy tests and `import_v1` tests use them. The browser no longer loads them.
@@ -82,7 +86,7 @@ Static files are served from disk: reload after editing browser code. Server imp
 
 ```bash
 npm run check          # node --check on every module (syntax)
-npm test               # full node --test suite (109 tests, SQLite integration included)
+npm test               # full node --test suite (115 tests, SQLite integration included)
 npm run test:api       # the calculator backend (api.mjs)
 npm run test:finance   # legacy: money, bills, presence
 npm run test:access    # legacy: identity, permissions, approvals, auth
@@ -93,11 +97,12 @@ CSS/copy-only change: inspect the page at phone + desktop width, then `git diff 
 
 ## Rules that bite
 
-- **Never publish.** GitHub Pages deploys only through manual dispatch of `.github/workflows/pages.yml`. Backend deploys through ChatGPT Sites. Both are user-initiated. Backend before frontend when endpoints change.
+- **Never publish unasked.** GitHub Pages deploys only through manual dispatch of `.github/workflows/pages.yml`; the Worker through `npm run cf:deploy` (wrangler, logged in as the user). Both are user-initiated. Worker before Pages when endpoints change.
+- **The Worker holds real accounts.** Test with `npm run cf:dev` (local workerd, `.dev.vars`, fresh state in `.wrangler/`), never against production.
 - **Never add a login bypass, dev-only credential, or test route.** Use the sample server for other roles.
 - **4173 is real data.** No test transactions there. Don't restart it or sign the user out just to check something.
 - **No secrets in the repo.** `.local/` holds credentials and baselines. Don't print, copy, or screenshot them.
-- Pages prices come from `DEFAULT_BANDS` in `calc-model.js`; a price change on the live site = edit it + republish. Test the Pages build locally with `pages-preview` (launch.json, port 4190, serves `dist/pages`).
+- Live prices are edited by the Owner on the Admin page (stored in the Worker). `DEFAULT_BANDS` only seeds a fresh database and the calculator-only build. Test the Pages build locally with `pages-preview` (launch.json, port 4190, serves `dist/pages`).
 - Money is integer cents. Each saved count snapshots band name/color/price per line; price edits never rewrite history. Saves carry `pricesRevision`, stale ones get 409.
 - Deploy only files named in `release.json` from a fresh staging dir.
 - `HANDOFF.md` and `WEBSITE-REVIEW.md` are deliberately untracked (private ops notes). Keep them that way.
@@ -105,4 +110,4 @@ CSS/copy-only change: inspect the page at phone + desktop width, then `git diff 
 ## Publish targets (for reference, user-triggered only)
 
 - Frontend: https://blazzer10200.github.io/band-calculator/ (repo `Blazzer10200/band-calculator`, renamed from `pto-roaster`; remote name `github`; local folder is still `projects/pto-roaster`)
-- Backend: ChatGPT Sites Worker, see `HANDOFF.md` for the current deployment ids
+- Backend: https://band-calculator.blazzer.workers.dev (the user's Cloudflare account, Workers Free, worker `band-calculator`)
