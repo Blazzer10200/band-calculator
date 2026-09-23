@@ -84,12 +84,14 @@ function openSqlite(file){
   return {db,transaction};
 }
 // setupCode: when set, creating the Owner account also needs this code (a public server must not let a stranger claim it first).
-export function createApi({file=':memory:',storage,bands=DEFAULT_BANDS,key,now=Date.now,backupStatus=()=>({enabled:false}),cookieName='pto_session',local=true,hash,setupCode=''}={}){
+// seed: a band-accounts document (scripts/export-accounts.mjs), loaded only while the database has no accounts.
+export function createApi({file=':memory:',storage,bands=DEFAULT_BANDS,key,now=Date.now,backupStatus=()=>({enabled:false}),cookieName='pto_session',local=true,hash,setupCode='',seed=null}={}){
   if(!/^[a-zA-Z0-9_-]{1,80}$/.test(cookieName))throw Error('Invalid session cookie name.');
   if(!key&&(storage||file!==':memory:'))throw Error('A persistent encryption key is required for this database.');
   key=key||randomBytes(32);
   const {db,transaction:tx}=storage||openSqlite(file),{hashPassword,verifyPassword,decoy}=passwords(hash);
   schema(db);importLegacy(db,bands,tx);
+  if(seed)seedAccounts(db,tx,seed,key);
   const pricesRevision=()=>Number(db.prepare("SELECT value FROM meta WHERE key='prices_revision'").get().value);
   const countsRevision=id=>db.prepare('SELECT n FROM revisions WHERE user_id=?').get(id)?.n||0;
   const bump=id=>db.prepare('INSERT INTO revisions VALUES(?,1) ON CONFLICT(user_id) DO UPDATE SET n=n+1').run(id);
@@ -100,7 +102,7 @@ export function createApi({file=':memory:',storage,bands=DEFAULT_BANDS,key,now=D
     const session=db.prepare('SELECT users.*,sessions.mfa_verified,sessions.remember AS session_remember FROM sessions JOIN users ON users.id=sessions.user_id WHERE sessions.hash=? AND sessions.expires>? AND users.disabled=0').get(digest(cookieToken(request)),now());
     return session?publicUser(session):null;
   };
-  const guestData=()=>({authenticated:false,setupRequired:!db.prepare('SELECT id FROM users LIMIT 1').get(),...(setupCode?{setupCode:true}:{}),versions:{prices:pricesRevision()},development:local});
+  const guestData=()=>({authenticated:false,setupRequired:!db.prepare('SELECT id FROM users WHERE owner=1').get(),...(setupCode?{setupCode:true}:{}),versions:{prices:pricesRevision()},development:local});
   const sessionData=user=>({authenticated:true,user,security:security.state(user),versions:{prices:pricesRevision(),counts:countsRevision(user.id)},development:local});
   const newSession=(user,verified=false,remember=!!user.remembered)=>{
     db.prepare('DELETE FROM sessions WHERE expires<=?').run(now());
@@ -133,15 +135,16 @@ export function createApi({file=':memory:',storage,bands=DEFAULT_BANDS,key,now=D
       user=auth(request);
       if((route==='/api/auth/setup'||route==='/api/auth/register')&&method==='POST'){
         const setup=route==='/api/auth/setup';
-        if(setup&&db.prepare('SELECT id FROM users LIMIT 1').get())return json({error:'The Owner account is already set up.'},409);
-        if(!setup&&!db.prepare('SELECT id FROM users WHERE owner=1').get())return json({error:'The Owner must finish website setup first.'},409);
+        if(setup&&db.prepare('SELECT id FROM users WHERE owner=1').get())return json({error:'The Owner account is already set up.'},409);
+        // Without a setup code (local servers) the first account must be the Owner; with one, sign-ups never wait on it.
+        if(!setup&&!setupCode&&!db.prepare('SELECT id FROM users WHERE owner=1').get())return json({error:'The Owner must finish website setup first.'},409);
         security.limit((setup?'setup:':'register:')+remoteAddress,setup?5:10);
         if(setup&&setupCode&&(typeof body.setupCode!=='string'||!timingSafeEqual(Buffer.from(digest(body.setupCode.trim()),'hex'),Buffer.from(digest(setupCode),'hex'))))return json({error:'That setup code is not right.'},403);
         const username=validUsername(body),name=body.name===undefined?username:validName(body.name);validatePassword(body.password);
         if(db.prepare('SELECT id FROM users WHERE username=? COLLATE NOCASE').get(username))return json({error:'That username is already taken.'},409);
         const password=await security.work(()=>hashPassword(body.password)),id=crypto.randomUUID();
         const created=tx(()=>{
-          if(setup&&db.prepare('SELECT id FROM users LIMIT 1').get())throw failure('The Owner account is already set up.',409);
+          if(setup&&db.prepare('SELECT id FROM users WHERE owner=1').get())throw failure('The Owner account is already set up.',409);
           if(db.prepare('SELECT id FROM users WHERE username=? COLLATE NOCASE').get(username))throw failure('That username is already taken.',409);
           db.prepare("INSERT INTO users(id,name,email,username,password,owner,roles,approval,requested_at) VALUES(?,?,?,?,?,?,'[]','approved',?)").run(id,name,id+'@pto.invalid',username,password,Number(setup),new Date(now()).toISOString());
           audit(id,setup?'Owner account created':'Account created');return db.prepare('SELECT * FROM users WHERE id=?').get(id);
@@ -286,4 +289,28 @@ export function restoreSnapshot(document,{file=':memory:',...options}={}){
     }
     api.db.exec('COMMIT');return api;
   }catch(error){if(api.db.isTransaction)api.db.exec('ROLLBACK');api.close();throw error;}
+}
+// Accounts and their counts move from one server to another; bands, prices and settings stay, sessions never move.
+const SEED_TABLES=['users','account_security','recovery_codes','counts','cashouts','revisions'];
+export const exportAccounts=db=>({format:'band-accounts',version:1,createdAt:new Date().toISOString(),tables:Object.fromEntries(SEED_TABLES.map(name=>[name,db.prepare('SELECT '+(name==='users'?USER_COLUMNS:'*')+' FROM '+name).all().map(row=>name==='account_security'?{...row,pending:null,pending_until:null}:{...row})]))});
+export function seedAccounts(db,tx,document,key){
+  if(document?.format!=='band-accounts'||document.version!==1)throw Error('Unsupported accounts seed.');
+  const {tables}=document;
+  if(!tables||SEED_TABLES.some(name=>!Array.isArray(tables[name])))throw Error('Incomplete accounts seed.');
+  if(tables.users.filter(u=>u.owner===1).length!==1)throw Error('Accounts seed must contain one Owner.');
+  for(const user of tables.users)if(!PASSWORD_HASH.test(user.password))throw Error('Invalid account in seed.');
+  // 2FA secrets are sealed with the source server's key; they only carry over when both servers share it.
+  for(const record of tables.account_security)if(record.secret)unseal(JSON.parse(record.secret),key);
+  return tx(()=>{
+    if(db.prepare('SELECT id FROM users LIMIT 1').get())return false;
+    for(const name of SEED_TABLES){
+      const columns=db.prepare('PRAGMA table_info('+name+')').all().map(c=>c.name);
+      for(const record of tables[name]){
+        if(Object.keys(record).some(field=>!columns.includes(field)))throw Error('Unsupported seed fields.');
+        const fields=columns.filter(c=>Object.hasOwn(record,c));
+        db.prepare('INSERT INTO '+name+'('+fields.join(',')+') VALUES('+fields.map(()=>'?').join(',')+')').run(...fields.map(c=>record[c]));
+      }
+    }
+    return true;
+  });
 }

@@ -9,7 +9,7 @@ export class BandStore extends DurableObject{
     const key=Buffer.from(env.BAND_KEY||'','base64');
     if(key.length!==32)throw Error('The BAND_KEY secret must be 32 bytes, base64.');
     if(!env.SETUP_CODE)throw Error('The SETUP_CODE secret is missing.');
-    this.api=createApi({storage:durableStorage(ctx.storage),key,local:false,cookieName:SESSION_COOKIE,hash:WORKER_HASH,setupCode:env.SETUP_CODE});
+    this.api=createApi({storage:durableStorage(ctx.storage),key,local:false,cookieName:SESSION_COOKIE,hash:WORKER_HASH,setupCode:env.SETUP_CODE,seed:env.BAND_SEED?JSON.parse(env.BAND_SEED):null});
   }
   fetch(request){return this.api.handle(request,{remoteAddress:request.headers.get('cf-connecting-ip')||'unknown'});}
 }

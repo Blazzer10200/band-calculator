@@ -50,7 +50,7 @@ npm run cf:dev       # the Worker in the real runtime, http://127.0.0.1:8787 (se
 npm run cf:deploy    # wrangler deploy; needs `wrangler login`
 ```
 
-Worker secrets: `BAND_KEY` (32 random bytes, base64; encrypts 2FA secrets; a private copy is in `.local/`, so never rotate it casually) and `SETUP_CODE` (needed once to create the Owner account). On Workers Free each request gets about 10 ms of CPU, so Worker passwords use lighter scrypt settings (`WORKER_HASH`); the stronger local hashes still verify. The Owner's encrypted backup download may exceed that budget.
+Worker secrets: `BAND_KEY` (32 random bytes, base64; encrypts 2FA secrets; a private copy is in `.local/`, so never rotate it casually) and `SETUP_CODE` (needed once to create the Owner account; anyone can sign up before that). To move accounts from a local server, run `node scripts/export-accounts.mjs > .local/seed.json`, set it as the `BAND_SEED` secret, deploy, then delete the secret; it only loads into a database with no accounts. On Workers Free each request gets about 10 ms of CPU, so Worker passwords use lighter scrypt settings (`WORKER_HASH`); the stronger local hashes still verify. The Owner's encrypted backup download may exceed that budget.
 
 Deploy the Worker before the site when endpoints change. The older ChatGPT Sites backend (`worker.js`, `cloud-api.mjs`) is retired and unused.
 

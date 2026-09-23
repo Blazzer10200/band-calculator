@@ -18,6 +18,9 @@ GitHub Pages build (dist/pages): <meta name="band-api"> = the Worker origin (als
   X-PTO-Session (token in sessionStorage). BAND_API= (empty) builds the old calculator-only site (<meta band-standalone>).
   Workers Free = ~10 ms CPU/request → WORKER_HASH scrypt N=4096 (tagged "s4096.8.1$"); untagged = strong local hashes.
   Worker secrets: BAND_KEY (copy in .local/cloudflare-band-key.txt), SETUP_CODE (.local/cloudflare-setup-code.txt).
+  Sign-ups never wait on the Owner when SETUP_CODE is set. Hashing runs in the Durable Object (30 s CPU), so strong
+  local hashes are fine there. Local accounts moved in 2026-09-23 via scripts/export-accounts.mjs → one-time
+  BAND_SEED secret (loaded only into a DB with no users; deleted after). Put the secret BEFORE deploying new code.
   The stash "WIP: Worker backend port" is the abandoned cloud-api.mjs route; superseded, not needed.
 ```
 
