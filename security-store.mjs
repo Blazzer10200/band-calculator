@@ -14,11 +14,11 @@ export function securitySchema(db){
   if(!db.prepare('PRAGMA table_info(sessions)').all().some(c=>c.name==='mfa_verified'))db.exec('ALTER TABLE sessions ADD COLUMN mfa_verified INTEGER NOT NULL DEFAULT 0');
   for(const table of ['sessions','login_challenges'])if(!db.prepare('PRAGMA table_info('+table+')').all().some(c=>c.name==='remember'))db.exec('ALTER TABLE '+table+' ADD COLUMN remember INTEGER NOT NULL DEFAULT 0');
 }
-export function createSecurity({db,key,auth,publicUser,newSession,config,audit,digest,verifyPassword,hashPassword,validatePassword,json,snapshot,now=Date.now,backupStatus}){
+export function createSecurity({db,key,auth,publicUser,newSession,config,audit,digest,verifyPassword,hashPassword,validatePassword,json,snapshot,now=Date.now,backupStatus,isAdmin=user=>user.owner||permits(permissionsFor(user,config()),'access','manage')}){
   let cryptoJobs=0;
   const row=id=>db.prepare('SELECT * FROM account_security WHERE user_id=?').get(id);
   const enabled=id=>!!row(id)?.secret;
-  const required=user=>!!user&&user.approval==='approved'&&(user.owner||permits(permissionsFor(user,config()),'access','manage'));
+  const required=user=>!!user&&user.approval==='approved'&&isAdmin(user);
   const policy=()=>!!db.prepare('SELECT require_admin_mfa FROM security_policy WHERE id=1').get().require_admin_mfa;
   function state(user){return {mfaEnabled:enabled(user.id),recoveryCodes:db.prepare('SELECT count(*) AS count FROM recovery_codes WHERE user_id=?').get(user.id).count,admin:required(user),requireAdminMfa:policy(),enrollmentRequired:policy()&&required(user)&&!enabled(user.id)};}
   function limit(bucket,max=8,window=600000){
@@ -97,7 +97,7 @@ export function createSecurity({db,key,auth,publicUser,newSession,config,audit,d
       return json(backupStatus());
     }
     if(route==='/api/audit'&&method==='GET'){
-      if(!permits(permissionsFor(user,config()),'access','manage'))throw failure('Account administration permission required.',403);
+      if(!isAdmin(user))throw failure('Account administration permission required.',403);
       const before=Number(searchParams.get('before'))||Number.MAX_SAFE_INTEGER;
       const events=db.prepare('SELECT audit.id,audit.at,audit.action,audit.document,users.name AS actor FROM audit LEFT JOIN users ON audit.user_id=users.id WHERE audit.id<? ORDER BY audit.id DESC LIMIT 51').all(before);
       const more=events.length>50;return json({events:events.slice(0,50).map(e=>({id:e.id,at:e.at,action:e.action,actor:auditDetails(e.document).actorName||e.actor||'Deleted account',changes:auditDetails(e.document).changes||[]})),next:more?events[49].id:null});

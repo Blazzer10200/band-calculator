@@ -12,7 +12,7 @@ test('dismissing a reminder affects only that account and does not change securi
   assert.match(securityNudge(other),/Add another layer of protection/);
   assert.deepEqual(owner,before);
   owner.security.mfaEnabled=true;
-  assert.match(securityNudge(owner),/Protect every admin account/);
+  assert.match(securityNudge(owner),/Lock down the Owner account/);
 });
 
 test('reminder dismissal works when browser storage is unavailable',t=>{

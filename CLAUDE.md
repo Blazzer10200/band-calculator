@@ -4,23 +4,27 @@
 
 ## What this is
 
-Private FiveM band calculator: count bands at configured prices, scan inventory screenshots on-device (vendored Tesseract), save counts, plus login/approvals/roles, MFA, and encrypted backups. Roster and Treasury were stripped from the UI on 2026-09-19; the backend still serves their endpoints and keeps the data. Plain ES modules, no framework, no bundler in dev.
+FiveM band calculator, calculator-first since 2026-09-22 (branch `calculator-only`). Anyone can use the calculator (count bands, scan inventory screenshots on-device with vendored Tesseract, quick math) without an account. Signing up is instant; an account saves counts into a running total with cash-outs and a History page. Only the Owner edits prices (Admin page), plus MFA and encrypted backups. Plain ES modules, no framework, no bundler in dev.
 
 ```text
 Browser (index.html + *.js/*.css, served from disk)
   └─ api-config.js picks the backend by hostname
-       ├─ dev-api.mjs  → server.mjs  → SQLite  .local/pto-dev.sqlite   (localhost:4173, YOUR private data)
-       ├─ scripts/sample-server.mjs → in-memory fake data              (localhost:4174, disposable)
-       └─ cloud-api.mjs → worker.js  → Cloudflare D1                    (production, via ChatGPT Sites)
+       ├─ api.mjs → server.mjs → SQLite .local/pto-dev.sqlite          (localhost:4173, YOUR private data)
+       ├─ api.mjs → scripts/sample-server.mjs → in-memory fake data     (localhost:4174, disposable)
+       └─ cloud-api.mjs → worker.js → Cloudflare D1                     (production, NOT ported yet: still the old roster/finance API)
 ```
 
-Shared business logic lives in `*-model.js`. Both API adapters (`dev-api.mjs`, `cloud-api.mjs`) must agree when an endpoint changes.
+`api.mjs` is the new backend. On first start against an old database it imports bands, deposits (as counts) and payouts (as cash-outs) once (`meta.import_v1`). `calc-model.js` is shared by the browser and `api.mjs`. The legacy `dev-api.mjs` + `*-model.js` + `finance-*` modules stay on disk only because `cloud-api.mjs`, the legacy tests and `import_v1` tests use them. The browser no longer loads them.
 
 ## Map
 
 ```text
-app.js                 routes (routeNames, followRoute, render), header, page mounting
-finance-ui.js          Calculator screen (mountFinance, mode 'bands'): counts, scanner, quick math
+app.js                 routes (#/ calculator, #/history, #/admin), guest vs signed-in header, session polling
+calculator-ui.js       Calculator screen (mountCalculator): guest + signed-in modes, running total, cash-out, scanner
+history-ui.js          History page: stats, 30-day chart, per-band totals, cash-outs, filterable list, CSV
+admin-ui.js            Owner-only: Prices editor (PUT /api/admin/bands w/ pricesRevision), Accounts, Activity, Backups
+api.mjs                the backend (routes, schema, legacy import, snapshot/restore); tests in api.test.js
+calc-model.js          money, days (America/Chicago, week starts Thursday), band validation; browser + server
 band-scan.js           screenshot OCR (ocr-engine/ocr-worker/ocr-core + eng.traineddata.gz, vendored Tesseract).
                        Three passes. Pass 1 sweeps the whole image for "<Color> Stack" names and is used only to
                        locate slots. Those names feed `lattice()`, which infers the slot grid; pass 2 re-reads every
@@ -36,14 +40,13 @@ band-scan.js           screenshot OCR (ocr-engine/ocr-worker/ocr-core + eng.trai
 quick-math.js          plain calculator panel
 panel-layout.js        "Arrange panels" mode: drag/resize the calculator panels, saved per account.
                        Only active at 820px+; x/w are fractions of the workspace width, y/h are pixels.
-finance-model.js       money rules, receipts, integer cents
-finance-api.js         finance endpoints shared by both adapters
-profile-ui.js / member-profile.js               identity editing (used by auth-ui)
-auth-ui.js / access-model.js                    login, approvals, roles
-presence.js                                     server-side presence (no UI anymore)
-security-*.js / security-*.mjs                  MFA, recovery codes, encrypted backups
+auth-ui.js             sign in / create account / setup screens, account dialog (display name + security)
+security-*.js / security-*.mjs                  MFA, recovery codes, encrypted backups, activity log
+LEGACY (production + old tests only, not served to the browser): dev-api.mjs, finance-*.js, model.js,
+  access-model.js, hub-model.js, profile-ui.js, member-profile.js, player-picker.js, cloud.js, presence.js
 experience.css         current layout overrides (check here first for layout bugs)
-calculator.css         calculator screen styles
+calculator.css         calculator styles + the --calc-* tokens, scoped to #main-content (all pages)
+app.css                guest pitch, History, Admin
 *.css                  domain stylesheets (auth, security, polish); one rule per line, pruned of unused selectors
 server.mjs             local dev server, loopback only, port 4173
 scripts/dev.ps1        launcher: status/start/restart, PID-guarded
@@ -61,7 +64,7 @@ Not navigation targets: `node_modules/`, `dist/`, `.local/`, `*.tgz` at root (ol
 Browser pane, `.claude/launch.json`:
 
 - `pto-dev` → http://127.0.0.1:4173 — your real local database. Sign in yourself; Claude never types passwords.
-- `pto-sample` → http://127.0.0.1:4174 — fake in-memory data. Use this for test deposits, payouts, approvals, removals. Accounts in `docs/DEVELOPMENT.md` (`qa.admin`, `qa.treasurer`, `qa.existing`, `qa.applicant`).
+- `pto-sample` → http://127.0.0.1:4174 — fake in-memory data. Use this for test counts, cash-outs, price edits, account disabling. Accounts in `docs/DEVELOPMENT.md` (`qa.admin` Owner, `qa.existing`, `qa.fresh`).
 
 Static files are served from disk: reload after editing browser code. Server imports (`*.mjs`) need a restart. Check ports before spawning: `npm run dev:status` / `npm run dev:sample:status`. Never kill a listener you didn't start.
 
@@ -69,16 +72,17 @@ Static files are served from disk: reload after editing browser code. Server imp
 
 - No Svelte/Python/Rust here, so `/check` and `/test` have nothing to detect. Use the npm scripts below directly.
 - LSP works for `.js`/`.mjs` (tsserver). `Grep` honors `.gitignore`, so `.local/` and `dist/` stay out of results.
-- Screenshots: `get_page_text` / `read_page` first; screenshot only when layout matters. Use the `data-page`, `data-access-tab`, `data-finance-quantity` selectors from `docs/DEVELOPMENT.md`.
+- Screenshots: `get_page_text` / `read_page` first; screenshot only when layout matters. Use the `data-page`, `data-admin-tab`, `data-finance-quantity` selectors from `docs/DEVELOPMENT.md`.
 - Requires Node 24+ (SQLite tests). Installed: v24.19.0.
 
 ## Verify
 
 ```bash
 npm run check          # node --check on every module (syntax)
-npm test               # full node --test suite (86 tests, SQLite integration included)
-npm run test:finance   # money, bills, presence
-npm run test:access    # identity, permissions, approvals, auth
+npm test               # full node --test suite (109 tests, SQLite integration included)
+npm run test:api       # the calculator backend (api.mjs)
+npm run test:finance   # legacy: money, bills, presence
+npm run test:access    # legacy: identity, permissions, approvals, auth
 npm run verify:build   # check + Worker build + Pages build + module-graph verify. Builds only, never publishes.
 ```
 
@@ -90,7 +94,8 @@ CSS/copy-only change: inspect the page at phone + desktop width, then `git diff 
 - **Never add a login bypass, dev-only credential, or test route.** Use the sample server for other roles.
 - **4173 is real data.** No test transactions there. Don't restart it or sign the user out just to check something.
 - **No secrets in the repo.** `.local/` holds credentials and baselines. Don't print, copy, or screenshot them.
-- Money is integer cents. Price snapshots on deposits are immutable. Owner may confirm own payout; other managers need a second manager.
+- **Don't publish the Pages frontend from this branch** until `cloud-api.mjs`/`worker.js` serve the `api.mjs` endpoints: the new browser code would call routes production doesn't have.
+- Money is integer cents. Each saved count snapshots band name/color/price per line; price edits never rewrite history. Saves carry `pricesRevision`, stale ones get 409.
 - Deploy only files named in `release.json` from a fresh staging dir.
 - `HANDOFF.md` and `WEBSITE-REVIEW.md` are deliberately untracked (private ops notes). Keep them that way.
 

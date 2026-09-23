@@ -1,19 +1,29 @@
 import http from 'node:http';
 import {readFile} from 'node:fs/promises';
 import {scryptSync} from 'node:crypto';
-import {createDevApi} from '../dev-api.mjs';
+import {createApi} from '../api.mjs';
 import {clientFiles} from '../client-files.mjs';
-import {sampleData} from '../test-fixtures.js';
 const port=Number(process.argv.find(a=>a.startsWith('--port='))?.slice(7)||4174);
 if(!Number.isInteger(port)||port<4174||port>4199)throw Error('Sample port must be between 4174 and 4199.');
-const data=sampleData();data.contacts=[];data.purchases=[];data.gangNotes='';
-data.members=[{id:'qa-legacy',name:'QA Existing Character',callsign:'OLD',rank:'Enforcer',status:'active',joined:'2026-08-01',notes:'Preserved linking notes.'}];
-const api=createDevApi({seed:data,cookieName:`pto_dev_session_${port}`}),salt='cd'.repeat(16),password=salt+':'+scryptSync('Local-QA-password-123',salt,64,{N:32768,r:8,p:3,maxmem:64*1024*1024}).toString('hex');
-for(const [id,name,owner,approval,stateId] of [['qa.admin','QA Administrator',1,'approved','00001'],['qa.existing','Rocco Moretti',0,'approved','00002'],['qa.applicant','QA Applicant',0,'pending','00003'],['qa.treasurer','QA Treasurer',0,'approved','00004']])api.db.prepare('INSERT INTO users(id,name,email,username,password,owner,roles,approval,stateId,phone,requested_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)').run(id,name,id+'@pto.invalid',id,password,owner,owner?'[]':id==='qa.treasurer'?'["treasurer"]':'["member"]',approval,stateId,'555-000'+stateId.at(-1),new Date().toISOString());
-const qaWorkspace=JSON.parse(api.db.prepare('SELECT document FROM workspace WHERE id=1').get().document);
-qaWorkspace.finance={version:1,startDate:'2026-09-03',deposits:[{id:'qa-layout-deposit-1',userId:'qa.existing',name:'Rocco Moretti',at:new Date().toISOString(),lines:qaWorkspace.bands.map(b=>({...b,quantity:2000})),notes:'A long receipt note to make sure details stay inside their card. '+('Receipt details '.repeat(20)),status:'pending'}],payouts:[],bills:[]};
-qaWorkspace.hub={events:[{id:'qa-event',title:'Thursday gang meeting and treasury collection',at:'2026-09-10T23:00:00Z',location:'The main gang house and treasury office',notes:'Bring your recorded stash for verification.',responses:{},by:'qa.admin'}],availability:[],notes:{},reads:{}};
-api.db.prepare('UPDATE workspace SET document=?,revision=revision+1 WHERE id=1').run(JSON.stringify(qaWorkspace));
+// In memory only: fabricated accounts and two weeks of fabricated counts.
+const api=createApi({cookieName:`pto_dev_session_${port}`}),salt='cd'.repeat(16),password=salt+':'+scryptSync('Local-QA-password-123',salt,64,{N:32768,r:8,p:3,maxmem:64*1024*1024}).toString('hex');
+const joined=new Date(Date.now()-20*86400000).toISOString();
+for(const [id,name,owner] of [['qa.admin','QA Owner',1],['qa.existing','Rocco Moretti',0],['qa.fresh','QA Newcomer',0]])api.db.prepare("INSERT INTO users(id,name,email,username,password,owner,roles,approval,requested_at) VALUES(?,?,?,?,?,?,'[]','approved',?)").run(id,name,id+'@pto.invalid',id,password,owner,joined);
+const bands=api.db.prepare('SELECT * FROM bands ORDER BY position').all();
+let seed=7;const rand=n=>(seed=(seed*16807)%2147483647)%n;
+for(const user of ['qa.admin','qa.existing']){
+  let cashout=null,open=[];
+  for(let day=14;day>=0;day--){
+    for(let k=rand(3);k>0;k--){
+      const lines=bands.filter(()=>rand(3)===0).map(b=>({id:b.id,name:b.name,color:b.color,price:b.price,quantity:1+rand(b.price>500000?4:40)}));if(!lines.length)continue;
+      const at=new Date(Date.now()-day*86400000-rand(36000000)).toISOString(),id=crypto.randomUUID();
+      api.db.prepare('INSERT INTO counts VALUES(?,?,?,?,?,?,NULL,NULL)').run(id,user,at,JSON.stringify(lines),lines.reduce((n,l)=>n+l.quantity*l.price,0),rand(4)===0?'Run with the crew':'');open.push(id);
+    }
+    if(day%6===3&&open.length){cashout=crypto.randomUUID();const at=new Date(Date.now()-day*86400000+3600000).toISOString();
+      api.db.prepare('INSERT INTO cashouts VALUES(?,?,?,(SELECT sum(total) FROM counts WHERE id IN ('+open.map(()=>'?').join(',')+')),NULL)').run(cashout,user,at,...open);
+      api.db.prepare('UPDATE counts SET cashout_id=? WHERE id IN ('+open.map(()=>'?').join(',')+')').run(cashout,...open);open=[];}
+  }
+}
 const types={html:'text/html',js:'text/javascript',css:'text/css',png:'image/png',gif:'image/gif',gz:'application/gzip'};
 http.createServer(async(req,res)=>{
   try{

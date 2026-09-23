@@ -1,5 +1,36 @@
 # Workspace release — September 2026
 
+## September 22 — Calculator-only (development only, not released)
+
+Local development site only (branch `calculator-only`). Production is untouched: the cloud backend
+(`cloud-api.mjs` / `worker.js`) still serves the old API, so the Pages frontend must not be published
+from this branch until that backend is ported.
+
+### User-facing changes
+
+- **The calculator works without an account.** Counting, the screenshot scanner and quick math are
+  open to everyone. A guest's count stays on the device for 24 hours and follows them into the account
+  they create or sign in to.
+- **Anyone can make an account, instantly.** Username and password, no approval step. The
+  roster, roles, join requests and treasury screens are gone.
+- **A running total with cash-outs.** Saved counts add up until you cash out; cash-out starts the total
+  over and the latest one can be undone. Every account can do this for itself.
+- **History page.** Today, this week, this month and all time; a 30-day chart with cash-out days marked;
+  totals per band; every cash-out; the full list with range/band/search filters and CSV export.
+- **Only the Owner changes prices** (new Admin page). Saved counts keep the prices they were saved at.
+  A count saved against prices that changed underneath it is refused and re-totalled, never lost.
+  Bands already in saved counts can be hidden but not deleted.
+- **Admin** also lists accounts (disable/enable; disabling signs the account out), the activity log,
+  and encrypted backups.
+
+### Under the hood
+
+- New backend `api.mjs` (SQLite) for both local servers, with tests in `api.test.js`. On first start it
+  imports the old database once: bands, open/removed/paid deposits become counts, payouts become
+  cash-outs, every existing account is kept. The local database was copied to `.local/archive/` first.
+- New browser modules `calculator-ui.js`, `history-ui.js`, `admin-ui.js`, `calc-model.js`, `app.css`;
+  the old finance/roster/access modules are no longer served but are still on disk.
+
 ## September 21 — The screenshot scanner reads by the slot grid
 
 Frontend-only change. The backend is untouched, and screenshots are still read entirely on your own

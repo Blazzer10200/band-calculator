@@ -52,8 +52,8 @@ select{background:var(--panel);border:1px solid var(--line);color:var(--text);bo
 .page-heading,.finance-confirm-actions,.simple-shell footer{ flex-wrap: wrap; }
 .simple-shell footer { gap: 12px 24px; }
 /* Finance: one task per section, quiet summaries, details on demand. */
-[data-finance-mode] { --finance-surface: #252b33; }
-[data-finance-mode] summary:focus-visible{ outline: 2px solid var(--accent); outline-offset: 3px; }
+#main-content { --finance-surface: #252b33; }
+#main-content summary:focus-visible{ outline: 2px solid var(--accent); outline-offset: 3px; }
 .quantity-stepper { display: grid; grid-template-columns: 44px minmax(0, 1fr) 44px; align-items: stretch; min-width: 0; border: 1px solid var(--line-strong); border-radius: 8px; background: #1e2024; }
 .quantity-stepper > button { min-width: 0; min-height: 46px; border: 0; border-radius: 7px; background: transparent; color: var(--accent); font-size: 23px; line-height: 1; }
 .quantity-stepper > button:hover:not(:disabled) { background: #2b4059; }
