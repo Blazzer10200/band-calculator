@@ -1,4 +1,4 @@
-/* PTO: charcoal surfaces, blue actions, a quiet eight-pixel spacing rhythm. */
+/* Band Calculator: charcoal surfaces, blue actions, a quiet eight-pixel spacing rhythm. */
 :root{--bg:#191b1f;--panel:#212429;--panel-hover:#292e35;--line:#353b44;--text:#edf0f5;--muted:#a3adbb;--accent:#86baff;--radius:12px;--control-radius:8px}
 body{background:var(--bg);color:var(--text)}
 button,input,textarea,summary,a{ -webkit-tap-highlight-color:transparent }

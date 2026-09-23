@@ -1,4 +1,4 @@
-name: Publish PTO Roaster
+name: Publish Band Calculator
 on:
   workflow_dispatch:
 permissions:

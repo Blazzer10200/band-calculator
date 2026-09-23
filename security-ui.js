@@ -26,7 +26,7 @@ export async function mountSecurity(root,{request,user,onDone}){
   function codesScreen(codes){
     root.innerHTML=`<section class="security-wizard" data-security-sensitive><span class="security-step">FINAL STEP</span><h2>Save your recovery codes</h2><p>Keep these in a password manager or somewhere private. They let you recover your account if you lose access.</p><div class="recovery-codes">${codes.map(code=>`<code>${esc(code)}</code>`).join('')}</div><button class="button secondary" id="download-codes">Download codes</button><p class="security-hint">These are shown once. Generating a new set replaces every old code.</p><label class="role-check saved-codes"><input type="checkbox" id="codes-saved"> I’ve saved my recovery codes somewhere safe</label><button class="button primary" id="codes-done" disabled>Finish setup</button>${message}</section>`;
     focusStep(root);
-    root.querySelector('#download-codes').onclick=()=>download('PTO Roaster recovery codes\nUsername: '+user.username+'\nKeep private. Account recovery invalidates the whole set.\n\n'+codes.join('\n'),'pto-recovery-codes.txt');
+    root.querySelector('#download-codes').onclick=()=>download('Band Calculator recovery codes\nUsername: '+user.username+'\nKeep private. Account recovery invalidates the whole set.\n\n'+codes.join('\n'),'band-calculator-recovery-codes.txt');
     root.querySelector('#codes-saved').onchange=e=>{root.querySelector('#codes-done').disabled=!e.target.checked;};
     root.querySelector('#codes-done').onclick=async()=>{try{if(onDone)await onDone();else await refresh();}catch(error){feedback(root,error.message,true);}};
   }

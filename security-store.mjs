@@ -69,7 +69,7 @@ export function createSecurity({db,key,auth,publicUser,newSession,config,audit,d
     if(route==='/api/security/setup'&&method==='POST'){
       await reauthenticate(request,body,user);if(enabled(user.id))throw failure('Two-factor is already enabled.');
       const secret=newTotpSecret();db.prepare('INSERT INTO account_security(user_id,pending,pending_until) VALUES(?,?,?) ON CONFLICT(user_id) DO UPDATE SET pending=excluded.pending,pending_until=excluded.pending_until').run(user.id,encrypt(secret),now()+600000);
-      const uri=`otpauth://totp/${encodeURIComponent('PTO Roaster:'+user.username)}?secret=${secret}&issuer=PTO%20Roaster&algorithm=SHA1&digits=6&period=30`;
+      const uri=`otpauth://totp/${encodeURIComponent('Band Calculator:'+user.username)}?secret=${secret}&issuer=Band%20Calculator&algorithm=SHA1&digits=6&period=30`;
       return json({secret,qr:await QRCode.toDataURL(uri,{width:220,margin:2,errorCorrectionLevel:'M'})});
     }
     if(route==='/api/security/confirm'&&method==='POST'){

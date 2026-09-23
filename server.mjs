@@ -12,7 +12,7 @@ let backupHealth={enabled:true,savedAt:null,error:null};
 const api=createApi({file:path.join(root,'.local','pto-dev.sqlite'),key,backupStatus:()=>backupHealth,cookieName:'pto_dev_session_4173'});
 const saveBackup=()=>dailyBackup(api,key,path.join(root,'.local','backups')).then(result=>{backupHealth={enabled:true,...result,error:null};}).catch(()=>{backupHealth={...backupHealth,error:'Automatic backup failed. Contact the site operator and download a backup below.'};console.error('Automatic backup failed. Check the private backup directory.');});
 await saveBackup();setInterval(saveBackup,60*60*1000).unref();
-const types = { '.html': 'text/html', '.css': 'text/css', '.js': 'text/javascript', '.gif': 'image/gif', '.png': 'image/png', '.gz': 'application/gzip' };
+const types = { '.html': 'text/html', '.css': 'text/css', '.js': 'text/javascript', '.gif': 'image/gif', '.png': 'image/png', '.svg': 'image/svg+xml', '.gz': 'application/gzip' };
 http.createServer(async (req, res) => {
   res.setHeader('Content-Security-Policy',"default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'; object-src 'none'");
   res.setHeader('X-Frame-Options','DENY');res.setHeader('X-Content-Type-Options','nosniff');res.setHeader('Referrer-Policy','no-referrer');res.setHeader('Permissions-Policy','camera=(), microphone=(), geolocation=()');
@@ -31,4 +31,4 @@ http.createServer(async (req, res) => {
     res.writeHead(200, { 'Content-Type': types[path.extname(file)], 'Cache-Control': 'no-store' });
     res.end(await readFile(file));
   } catch { res.writeHead(404).end('Not found'); }
-}).listen(4173, '127.0.0.1', () => console.log('PTO development with local login ready at http://127.0.0.1:4173'));
+}).listen(4173, '127.0.0.1', () => console.log('Band Calculator dev server ready at http://127.0.0.1:4173'));

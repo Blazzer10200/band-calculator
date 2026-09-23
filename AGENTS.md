@@ -1,4 +1,4 @@
-# PTO project workflow
+# Band Calculator project workflow
 
 Keep work focused on the user's current request. This file maps the project; it does not authorize publishing or changing live data.
 

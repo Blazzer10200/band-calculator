@@ -1,4 +1,4 @@
-# PTO Roaster — Claude project reference
+# Band Calculator (formerly PTO Roaster) — Claude project reference
 
 `AGENTS.md` is the Codex/ChatGPT-side rulebook this project was born with; this file is the Claude-side one. Both describe the same repo. Read `HANDOFF.md` before starting. Do not replay completed work.
 
@@ -101,5 +101,5 @@ CSS/copy-only change: inspect the page at phone + desktop width, then `git diff 
 
 ## Publish targets (for reference, user-triggered only)
 
-- Frontend: https://blazzer10200.github.io/pto-roaster/ (repo `Blazzer10200/pto-roaster`, remote name `github`)
+- Frontend: https://blazzer10200.github.io/band-calculator/ (repo `Blazzer10200/band-calculator`, renamed from `pto-roaster`; remote name `github`; local folder is still `projects/pto-roaster`)
 - Backend: ChatGPT Sites Worker, see `HANDOFF.md` for the current deployment ids

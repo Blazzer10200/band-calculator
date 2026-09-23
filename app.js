@@ -41,7 +41,7 @@ window.addEventListener('beforeunload',e=>{if(pageDirty||panel()?.busy){e.preven
 function header(){
   const nav=Object.keys(pages).filter(allowed);
   const right=signedIn()?accountMenu(session):'<div class="guest-actions"><button type="button" class="text-button" data-action="login">Sign in</button><button type="button" class="button primary" data-action="register">Create account</button></div>';
-  return `<header class="simple-header finance-header"><div class="header-top"><a class="brand" href="#/" data-page="calculator"><img class="finance-logo" src="./pto-still.png" alt="" width="40" height="40"><span>PTO<small>Band calculator</small></span></a>${right}</div>${nav.length>1?`<nav class="finance-main-nav" aria-label="Main navigation">${nav.map(id=>`<a href="${pages[id].route}" data-page="${id}" class="simple-nav ${page===id?'active':''}" ${page===id?'aria-current="page"':''}>${icon(pages[id].icon,16)}<span>${pages[id].label}</span></a>`).join('')}</nav>`:''}</header>`;
+  return `<header class="simple-header finance-header"><div class="header-top"><a class="brand" href="#/" data-page="calculator"><img class="finance-logo" src="./logo.svg" alt="" width="40" height="40"><span>Band Calculator</span></a>${right}</div>${nav.length>1?`<nav class="finance-main-nav" aria-label="Main navigation">${nav.map(id=>`<a href="${pages[id].route}" data-page="${id}" class="simple-nav ${page===id?'active':''}" ${page===id?'aria-current="page"':''}>${icon(pages[id].icon,16)}<span>${pages[id].label}</span></a>`).join('')}</nav>`:''}</header>`;
 }
 function render(){
   if(!session||session.security?.enrollmentRequired)return;
@@ -120,7 +120,7 @@ window.addEventListener('focus',pollSession);
 $('#modal').addEventListener('close',pollSession);
 setTimeout(schedulePoll,4000);
 async function start(){
-  $('#app').innerHTML='<div class="startup"><h1>PTO Band calculator</h1><p>Loading…</p></div>';
+  $('#app').innerHTML='<div class="startup"><h1>Band Calculator</h1><p>Loading…</p></div>';
   try{await openWorkspace(await authRequest('/api/session'));}
   catch{$('#app').innerHTML='<div class="startup"><h1>Unable to load the calculator</h1><p>Check your connection, then try again.</p><button class="button primary" data-action="reload">Try again</button></div>';}
 }

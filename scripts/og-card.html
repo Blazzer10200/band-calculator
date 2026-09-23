@@ -1,0 +1,49 @@
+<!doctype html>
+<!-- Source for og.png, the link preview Discord and friends show. Regenerate with scripts/og-card.ps1. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=Manrope:wght@700;800&display=block" rel="stylesheet">
+<style>
+  *{box-sizing:border-box;margin:0}
+  html,body{width:1200px;height:630px;overflow:hidden}
+  body{font-family:'DM Sans',sans-serif;color:#f3f5f8;background:#16181c;position:relative}
+  .glow{position:absolute;inset:0;background:radial-gradient(700px 420px at 88% 18%,rgba(134,186,255,.20),transparent 70%),radial-gradient(600px 400px at 8% 100%,rgba(143,211,162,.14),transparent 70%)}
+  .grid{position:absolute;inset:0;background-image:linear-gradient(#ffffff08 1px,transparent 1px),linear-gradient(90deg,#ffffff08 1px,transparent 1px);background-size:48px 48px;mask-image:linear-gradient(90deg,transparent,#000 40%,#000)}
+  .wrap{position:relative;display:grid;grid-template-columns:1fr 480px;gap:48px;align-items:center;height:100%;padding:0 72px}
+  .brand{display:flex;align-items:center;gap:22px;margin-bottom:34px}
+  .brand img{width:92px;height:92px}
+  .brand span{font:800 26px Manrope,sans-serif;letter-spacing:-.4px;color:#aab3c0}
+  h1{font:800 84px/0.98 Manrope,sans-serif;letter-spacing:-3.4px}
+  h1 em{font-style:normal;color:#86baff}
+  p{margin-top:26px;font-size:28px;line-height:1.4;color:#c3cad4;max-width:560px}
+  .card{background:linear-gradient(180deg,#262b32,#1e2126);border:1.5px solid #3a424d;border-radius:28px;padding:30px 32px;box-shadow:0 30px 80px #0008}
+  .label{font-size:15px;letter-spacing:2.4px;font-weight:600;text-transform:uppercase;color:#86baff}
+  .total{font:800 58px Manrope,sans-serif;letter-spacing:-2px;margin:8px 0 22px;font-variant-numeric:tabular-nums}
+  .row{display:grid;grid-template-columns:16px 1fr 56px 124px;align-items:center;gap:14px;white-space:nowrap;padding:11px 0;border-top:1px solid #333a44;font-size:22px}
+  .row i{width:16px;height:16px;border-radius:5px;background:var(--c)}
+  .row b{font-weight:600;font-variant-numeric:tabular-nums;text-align:right}
+  .row small{color:#8d96a3;font-size:19px;text-align:right}
+</style>
+</head>
+<body>
+<div class="glow"></div><div class="grid"></div>
+<div class="wrap">
+  <div>
+    <div class="brand"><img src="../logo.svg" alt=""><span>blazzer10200.github.io</span></div>
+    <h1>Band<br><em>Calculator</em></h1>
+    <p>Count your bands or paste a screenshot of your inventory. See what it's worth.</p>
+  </div>
+  <div class="card">
+    <div class="label">Total</div>
+    <div class="total">$364,000</div>
+    <div class="row"><i style="--c:#f2e23a"></i>Yellow band<small>×1</small><b>$12,500</b></div>
+    <div class="row"><i style="--c:#b28b6f"></i>Brown band<small>×35</small><b>$210,000</b></div>
+    <div class="row"><i style="--c:#ba98e4"></i>Purple band<small>×15</small><b>$37,500</b></div>
+    <div class="row"><i style="--c:#82aef5"></i>Blue band<small>×60</small><b>$90,000</b></div>
+    <div class="row"><i style="--c:#e4e5e0"></i>White band<small>×140</small><b>$14,000</b></div>
+  </div>
+</div>
+</body>
+</html>

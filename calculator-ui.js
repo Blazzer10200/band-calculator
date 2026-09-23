@@ -9,7 +9,7 @@ export async function mountCalculator(root,session,{request,onSaved,onClean,canR
   const signedIn=!!session.authenticated,owner=!!session.user?.owner,draftKey=signedIn?session.user.id:'guest';
   let state,confirm=null,message='',undoRemove=null,limit=12;
   const sectionKey=name=>`calc-section:${draftKey}:${name}`;
-  const quickMath=createQuickMath();let mathOpen=readUiPreference(sectionKey('math'))==='open';
+  const quickMath=createQuickMath();let mathOpen=readUiPreference(sectionKey('quick-math'))!=='closed';
   const layout=createPanelLayout({key:sectionKey('layout'),onChange:()=>syncArrangeBar()});
   const blank=()=>({quantities:{},notes:'',requestId:crypto.randomUUID()});
   let draft=readDraft(draftKey)||blank(),draftStored=true,savedFlash=false,entered=false,shots=[],scanQueue=null,scanProgress='',scanOthersOpen=false,renderScan=null;
@@ -131,7 +131,7 @@ export async function mountCalculator(root,session,{request,onSaved,onClean,canR
   function ownPage(){
     const enter=entered?'':' calc-enter';entered=true;
     const arrangeBar='<div class="calc-arrange-bar" data-arrange-bar><button type="button" class="text-button" data-arrange>Arrange panels</button><button type="button" class="text-button" data-arrange-reset hidden>Reset layout</button><small data-arrange-hint hidden>Drag a panel by its name. Pull the right or bottom edge to resize it.</small></div>';
-    return '<div class="calc-page'+enter+'"><div class="page-heading"><div><span class="eyebrow">PTO</span><h1>Band calculator</h1><p>'+(signedIn?'Count your bands, save the total, keep a running tally.':'Count your bands and see what they are worth. No account needed.')+'</p></div>'+arrangeBar+'</div>'+heroHtml()+'<div class="calc-workspace">'+countHtml()+'<div class="calc-side">'+scanHtml()+mathHtml()+recentHtml()+'</div></div></div>';
+    return '<div class="calc-page'+enter+'"><div class="page-heading"><div><span class="eyebrow">Calculator</span><h1>What are your bands worth?</h1><p>'+(signedIn?'Count your bands, save the total, keep a running tally.':'Count your bands and see what they are worth. No account needed.')+'</p></div>'+arrangeBar+'</div>'+heroHtml()+'<div class="calc-workspace">'+countHtml()+'<div class="calc-side">'+scanHtml()+mathHtml()+recentHtml()+'</div></div></div>';
   }
   function growNote(note){note.style.height='auto';note.style.height=Math.min(220,note.scrollHeight)+'px';note.style.overflowY=note.scrollHeight>220?'auto':'hidden';}
   function bindQuantityFields(form){
@@ -316,7 +316,7 @@ export async function mountCalculator(root,session,{request,onSaved,onClean,canR
     root.querySelectorAll('[data-discard]').forEach(b=>b.addEventListener('click',()=>{clearDraft(draftKey);draft=blank();onClean();message='';undoRemove=null;render();}));
     const note=form?.querySelector('#finance-note');if(note){growNote(note);note.addEventListener('input',()=>growNote(note));}
     bindScan();
-    const math=root.querySelector('[data-calc-math]');if(math){quickMath.bind(math);math.addEventListener('toggle',()=>{mathOpen=math.open;saveUiPreference(sectionKey('math'),mathOpen?'open':'closed');if(math.open)math.querySelector('[data-quick-math]')?.focus({preventScroll:true});});}
+    const math=root.querySelector('[data-calc-math]');if(math){quickMath.bind(math);math.addEventListener('toggle',()=>{if(math.open===mathOpen)return;mathOpen=math.open;saveUiPreference(sectionKey('quick-math'),mathOpen?'open':'closed');if(math.open)math.querySelector('[data-quick-math]')?.focus({preventScroll:true});});}
     bindEntries();
     layout.apply(root);layout.bind(root);
     root.querySelector('[data-arrange]')?.addEventListener('click',()=>layout.setArranging(!layout.arranging()));

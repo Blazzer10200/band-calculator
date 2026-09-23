@@ -44,7 +44,7 @@ if ($ptoExisting) {
     if (Get-PtoListener) { throw "Port $ptoPort is still occupied; no replacement started." }
   } else {
     [pscustomobject]@{ Preview=$ptoLabel; URL=$ptoUrl; PID=$ptoExisting.ProcessId; Healthy=$healthy; Managed=$owned; Result='Reused existing listener'; Log=if($owned){$ptoOut}else{'Started outside this launcher'} } | Format-List
-    if (!$healthy) { throw "Port $ptoPort is occupied but the PTO session endpoint is not healthy. No additional process started." }
+    if (!$healthy) { throw "Port $ptoPort is occupied but the Band Calculator session endpoint is not healthy. No additional process started." }
     exit 0
   }
 } elseif ($Action -eq 'status') {

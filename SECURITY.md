@@ -1,4 +1,4 @@
-# PTO security
+# Band Calculator security
 
 Both the loopback development server and hosted Worker enforce application login, approval, roles and two-factor policies. GitHub Pages serves only allowlisted public assets; private accounts and records remain in the backend.
 

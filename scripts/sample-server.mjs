@@ -24,7 +24,7 @@ for(const user of ['qa.admin','qa.existing']){
       api.db.prepare('UPDATE counts SET cashout_id=? WHERE id IN ('+open.map(()=>'?').join(',')+')').run(cashout,...open);open=[];}
   }
 }
-const types={html:'text/html',js:'text/javascript',css:'text/css',png:'image/png',gif:'image/gif',gz:'application/gzip'};
+const types={html:'text/html',js:'text/javascript',css:'text/css',png:'image/png',svg:'image/svg+xml',gif:'image/gif',gz:'application/gzip'};
 http.createServer(async(req,res)=>{
   try{
     if(!['127.0.0.1:'+port,'localhost:'+port].includes(req.headers.host)){res.writeHead(403).end('Loopback preview only.');return;}
@@ -37,4 +37,4 @@ http.createServer(async(req,res)=>{
     const name=url.pathname==='/'?'index.html':url.pathname.slice(1);if(!clientFiles.includes(name)){res.writeHead(404).end();return;}
     res.writeHead(200,{'Content-Type':types[name.split('.').at(-1)]||'application/octet-stream','Cache-Control':'no-store'});res.end(await readFile(new URL('../'+name,import.meta.url)));
   }catch(error){res.writeHead(500).end('QA preview error');}
-}).listen(port,'127.0.0.1',()=>console.log('Sample PTO preview: http://127.0.0.1:'+port+'/ — fabricated records, memory only.'));
+}).listen(port,'127.0.0.1',()=>console.log('Band Calculator sample preview: http://127.0.0.1:'+port+'/ — fabricated records, memory only.'));
