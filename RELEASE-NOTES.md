@@ -1,5 +1,17 @@
 # Workspace release — September 2026
 
+## September 23 — Accounts on the live site (released)
+
+The GitHub Pages site has sign-in again. Accounts live on a Cloudflare Worker
+(https://band-calculator.blazzer.workers.dev) that runs the same `api.mjs` in a SQLite Durable Object.
+
+- Anyone can create an account right away; the Owner slot is guarded by a one-time setup code.
+- Existing local accounts and their counts were moved over, so old usernames and passwords keep working.
+- The Violet band ($25,000) sits right under Yellow.
+- The calculator-only build (`BAND_API=`) is still available for a site with no server.
+
+(The September 22 calculator-only notes below are now released as part of this.)
+
 ## September 22 — Calculator-only (development only, not released)
 
 Local development site only (branch `calculator-only`). Production is untouched: the cloud backend
