@@ -2,8 +2,8 @@ import {uiIcon} from './ui-utils.js';
 const esc=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 export function accountMenu(session){
   const user=session.user,initials=user.name.trim().split(/\s+/).slice(0,2).map(word=>word[0]).join('').toUpperCase();
-  const role=user.owner?'Owner':'Member';
-  return `<details class="account-menu"><summary aria-label="Account menu for ${esc(user.name)}"><span class="account-avatar" aria-hidden="true">${esc(initials)}</span><span class="account-identity"><strong>${esc(user.name)}</strong><small>${role}</small></span><span class="account-chevron">${uiIcon('chevron')}</span></summary><div class="account-popover"><div class="account-meta"><strong>${esc(user.name)}</strong><span>@${esc(user.username)}</span><small>${role}</small></div><button type="button" data-action="account">${uiIcon('settings')}<span>Account settings</span></button><button type="button" data-action="logout">${uiIcon('logout')}<span>Sign out</span></button></div></details>`;
+  const role=user.owner?'Owner':'Member',first=user.name.trim().split(/\s+/)[0];
+  return `<details class="account-menu"><summary aria-label="Account menu for ${esc(user.name)}"><span class="account-avatar" aria-hidden="true">${esc(initials)}</span><span class="account-identity" aria-hidden="true">${esc(first)}</span></summary><div class="account-popover"><div class="account-meta"><strong>${esc(user.name)}</strong><span>@${esc(user.username)}</span><small>${role}</small></div><button type="button" data-action="account">${uiIcon('settings')}<span>Account settings</span></button><button type="button" data-action="logout">${uiIcon('logout')}<span>Sign out</span></button></div></details>`;
 }
 // Native disclosure behavior supports keyboard activation; dismiss without trapping focus.
 export function dismissAccountMenu(event){

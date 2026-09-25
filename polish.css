@@ -1,75 +1,97 @@
-/* Band Calculator: charcoal surfaces, blue actions, a quiet eight-pixel spacing rhythm. */
-:root{--bg:#191b1f;--panel:#212429;--panel-hover:#292e35;--line:#353b44;--text:#edf0f5;--muted:#a3adbb;--accent:#86baff;--radius:12px;--control-radius:8px}
-body{background:var(--bg);color:var(--text)}
-button,input,textarea,summary,a{ -webkit-tap-highlight-color:transparent }
-button,a,summary,input,textarea{transition:background-color .15s,border-color .15s,color .15s,box-shadow .15s}
-:where(button,a,summary,input,textarea):focus-visible{outline:2px solid var(--accent);outline-offset:4px}
-[hidden]{display:none!important}
-.panel,.auth-card,dialog{border-radius:var(--radius)}
-input:not([type=checkbox]):not([type=radio]),textarea{border-radius:var(--control-radius)}
-.button{border-radius:var(--control-radius);font-weight:600}
-.button.primary{background:var(--accent);color:#10233d;border:1px solid var(--accent);box-shadow:0 1px 2px #0003}
-.button.primary:hover{background:#a3cbff;border-color:#a3cbff}
-.button.secondary{background:#262b32;color:var(--text);border:1px solid var(--line)}
-.button.secondary:hover{background:#303741;border-color:#536176}
-button:disabled{cursor:not-allowed;opacity:.55}
-.header-top{display:flex;align-items:center;justify-content:space-between;gap:24px;margin-bottom:24px}
-.simple-header .brand{font-family:Manrope,sans-serif;font-size:24px;font-weight:750;letter-spacing:-.8px;max-width:min(65%,650px);min-width:0;overflow-wrap:anywhere}
-.account-menu{position:relative;flex-shrink:0;z-index:40;max-width:42%}
-.account-menu summary{list-style:none;display:flex;align-items:center;gap:10px;cursor:pointer;padding:7px 10px 7px 7px;border:1px solid transparent;border-radius:10px}
-.account-menu summary::-webkit-details-marker{display:none}
-.account-menu summary:hover,.account-menu[open] summary{background:var(--panel);border-color:var(--line)}
-.account-avatar{width:34px;height:34px;display:grid;place-items:center;flex-shrink:0;background:#2a3545;border:1px solid #435977;border-radius:50%;color:#b5d5ff;font-size:11px;font-weight:700;text-transform:uppercase}
-.account-identity{min-width:0;max-width:180px;display:grid;gap:4px}
-.account-identity strong{font-size:12px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.account-identity small{font-size:10px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.account-chevron{margin-left:10px;color:var(--muted)}
-.account-popover{position:absolute;right:0;top:calc(100% + 8px);width:248px;max-width:calc(100vw - 36px);padding:7px;background:#242931;border:1px solid #465160;border-radius:12px;box-shadow:0 16px 40px #0006;animation:pto-reveal .14s ease-out}
-.account-meta{padding:12px 10px 16px;margin-bottom:6px;border-bottom:1px solid var(--line);display:grid;gap:5px;overflow-wrap:anywhere}
-.account-meta strong{font-size:13px}
-.account-meta span,.account-meta small{font-size:11px;color:var(--muted)}
-.account-popover button{width:100%;display:flex;justify-content:space-between;align-items:center;text-align:left;padding:12px 10px;border:0;background:transparent;color:var(--text);font-size:12px;border-radius:6px;min-height:42px}
-.account-popover button:hover{background:#323c49}
-.account-popover button span{color:var(--muted)}
-.simple-shell{min-height:calc(100vh - 173px)}
-.simple-shell main{padding-top:32px}
-.simple-shell h1{font-size:28px;font-weight:700;letter-spacing:-1px}
-.simple-shell .page-heading{margin-bottom:24px}
-.simple-shell .page-heading p{line-height:1.6;color:var(--muted)}
-.heading-actions{flex-wrap:wrap;gap:8px}
-.tabs button{border-radius:7px;min-height:36px}
-.tabs button.selected{background:#2b384a;color:#b2d2ff}
-.simple-shell .empty{padding:40px 24px}
-.empty h3{font-size:16px;letter-spacing:-.3px;color:var(--text)}
-.empty p{font-size:12px;line-height:1.7;max-width:380px;margin:8px auto 0}
-.empty .button{margin-top:18px}
-.simple-shell footer{color:var(--muted);font-size:10px;padding-block:20px}
-#connection-status{display:flex;align-items:center;gap:7px}
-#connection-status::before{content:'';width:5px;height:5px;border-radius:50%;background:currentColor;opacity:.65}
-#toast{background:#273547;color:#e1edff;border:1px solid #55779e;border-radius:10px;box-shadow:0 8px 30px #0005;padding:13px 20px;max-width:calc(100vw - 32px);font-size:12px;line-height:1.5;transition:opacity .16s,transform .16s;pointer-events:none}
-.auth-card{box-shadow:0 18px 60px #0002}
-.auth-card input{min-height:44px}
-.auth-switch .text-button{padding:8px 2px}
-.auth-card .button{min-height:44px}
-.readonly-notice{background:#222b36;border-radius:0 8px 8px 0;font-size:11px}
-.access-notice:empty{display:none}
-.join-request{padding:24px}
-.request-heading{flex-wrap:wrap}
-@keyframes pto-reveal{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:translateY(0)}}
-@media(max-width:760px){
-  .header-top{margin-bottom:20px;gap:12px}
-  .simple-header .brand{font-size:21px;gap:9px}
+/* Ledger controls: pill buttons, flat inputs, select menus, the account menu, the dialog shell and the toast. */
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer;background:none;border:0;padding:0;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
+button:disabled{cursor:not-allowed;opacity:.45}
+a,summary{-webkit-tap-highlight-color:transparent}
+:where(button,a,summary,input,select,textarea,[tabindex]):focus-visible{outline:2px solid var(--good);outline-offset:3px}
+.skip-link{position:fixed;left:16px;top:12px;z-index:100;transform:translateY(-160%);padding:10px 18px;border:1px solid var(--good);border-radius:var(--r-pill);background:var(--bg-raised);color:var(--ink);font-size:13px}
+.skip-link:focus{transform:none}
+
+/* Buttons. Pills everywhere; the one primary action per view is the --ink fill. */
+.button{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:40px;padding:0 20px;border:1px solid transparent;border-radius:var(--r-pill);font-size:13px;font-weight:500;line-height:1.2;white-space:nowrap;transition:border-color var(--t),color var(--t),background-color var(--t),transform var(--t-fast)}
+.button:active:not(:disabled){transform:scale(.95)}
+.button.primary{background:var(--ink);border-color:var(--ink);color:var(--on-ink);font-weight:600}
+.button.primary:hover:not(:disabled){background:var(--good);border-color:var(--good)}
+.button.secondary{background:transparent;border-color:var(--line-hover);color:var(--ink)}
+.button.secondary:hover:not(:disabled){border-color:var(--soft)}
+.button .ui-icon{width:16px;height:16px}
+.text-button{display:inline-flex;align-items:center;gap:6px;padding:0;border:0;background:none;color:var(--soft);font-size:13px;font-weight:400;white-space:nowrap;transition:color var(--t)}
+.text-button:hover:not(:disabled){color:var(--ink)}
+.icon-button{display:inline-grid;place-items:center;width:32px;height:32px;padding:0;border:1px solid var(--line-strong);border-radius:50%;background:transparent;color:var(--soft);transition:border-color var(--t),color var(--t),transform var(--t-fast)}
+.icon-button:hover:not(:disabled){border-color:var(--mute);color:var(--ink)}
+.icon-button:active:not(:disabled){transform:scale(.95)}
+.icon-button .ui-icon,.icon-button svg{width:16px;height:16px}
+
+/* Inputs. 46px, hairline, the border turns green on focus. Screens shrink these where the spec says so. */
+label{display:block;margin:0 0 8px;font-size:12.5px;font-weight:400;color:var(--ink-2)}
+input:not([type=checkbox]):not([type=radio]):not([type=color]),select,textarea{width:100%;min-width:0;height:46px;padding:0 14px;border:1px solid var(--line-strong);border-radius:var(--r-input);background:transparent;color:var(--ink);font-size:14px;outline:none;transition:border-color var(--t)}
+textarea{height:auto;min-height:92px;padding:12px 14px;line-height:1.5;resize:vertical}
+input::placeholder,textarea::placeholder{color:var(--mute)}
+input:not([type=checkbox]):not([type=radio]):not([type=color]):hover,textarea:hover{border-color:var(--line-hover)}
+input:not([type=checkbox]):not([type=radio]):not([type=color]):focus,select:focus,textarea:focus{border-color:var(--good);outline:none}
+input[aria-invalid=true]{border-color:var(--danger)!important}
+input[type=number]{appearance:textfield;-moz-appearance:textfield}
+input::-webkit-inner-spin-button,input::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
+input[type=checkbox]{appearance:none;-webkit-appearance:none;flex:none;display:inline-grid;place-content:center;width:18px;height:18px;margin:0;border:1px solid var(--line-hover);border-radius:5px;background:transparent;cursor:pointer;transition:background-color var(--t),border-color var(--t)}
+input[type=checkbox]:checked{background:var(--ink);border-color:var(--ink)}
+input[type=checkbox]:checked::after{content:'';width:9px;height:5px;border-left:2px solid var(--on-ink);border-bottom:2px solid var(--on-ink);transform:translateY(-1px) rotate(-45deg)}
+.money-input{display:flex;align-items:center;height:38px;padding:0 12px;border:1px solid var(--line-strong);border-radius:var(--r-small);background:transparent;transition:border-color var(--t)}
+.money-input:focus-within{border-color:var(--good)}
+.money-input>span{color:var(--mute);font:14px var(--font-num)}
+.money-input input:not([type=checkbox]){height:100%;padding:0 0 0 4px;border:0!important;background:transparent;font:14px var(--font-num)}
+
+/* Custom selects (select-ui.js): a 36px pill with a CSS chevron. */
+.select-menu{display:block;position:relative;min-width:0;width:100%}
+.select-trigger{display:flex;align-items:center;justify-content:space-between;gap:14px;width:100%;height:36px;padding:0 16px;border:1px solid var(--line-strong);border-radius:var(--r-pill);background:transparent;color:var(--ink);font-size:13px;text-align:left;transition:border-color var(--t)}
+.select-trigger:hover:not(:disabled){border-color:var(--line-hover)}
+.select-trigger[aria-expanded=true]{border-color:var(--good)}
+.select-trigger>.ui-icon{display:none}
+.select-trigger::after{content:'';flex:none;width:6px;height:6px;margin-top:-3px;border-right:1.5px solid var(--soft);border-bottom:1.5px solid var(--soft);transform:rotate(45deg);transition:transform .3s var(--ease)}
+.select-trigger[aria-expanded=true]::after{transform:translateY(3px) rotate(225deg)}
+.select-value{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.select-trigger[aria-invalid=true]{border-color:var(--danger)}
+.select-options{position:fixed;inset:auto;margin:0;padding:6px;border:1px solid var(--line-strong);border-radius:var(--r-card);background:var(--bg-raised);color:var(--ink);box-shadow:0 20px 50px -20px #000;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:var(--line-hover) transparent}
+.select-options::backdrop{background:transparent;pointer-events:none}
+.select-option{display:flex;align-items:center;justify-content:space-between;gap:14px;min-height:38px;padding:8px 12px;border-radius:var(--r-small);font-size:13px;line-height:1.4;color:var(--ink-2);cursor:pointer}
+.select-option.is-active{background:#1a1a19;color:var(--ink)}
+.select-option[aria-selected=true]{color:var(--good)}
+.select-option[aria-disabled=true]{opacity:.45;cursor:not-allowed}
+.select-check{display:flex;width:16px;flex:none;color:var(--good)}
+.select-check .ui-icon{width:14px;height:14px}
+
+/* Account menu: avatar and first name; the popover keeps its content, flat. */
+.account-menu{position:relative;z-index:40;min-width:0}
+.account-menu>summary{display:flex;align-items:center;gap:10px;min-height:36px;list-style:none;font-size:13px;color:var(--ink);cursor:pointer;border-radius:var(--r-pill)}
+.account-menu>summary::-webkit-details-marker{display:none}
+.account-menu>summary:hover .account-avatar,.account-menu[open] .account-avatar{background:var(--line-strong)}
+.account-avatar{display:grid;place-items:center;flex:none;width:28px;height:28px;border-radius:50%;background:#1f1f1d;color:var(--ink-2);font:500 11px var(--font-num);text-transform:uppercase;transition:background-color var(--t)}
+.account-identity{min-width:0;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.account-popover{position:absolute;right:0;top:calc(100% + 12px);width:250px;max-width:calc(100vw - 32px);padding:6px;border:1px solid var(--line-strong);border-radius:var(--r-card);background:var(--bg-raised);box-shadow:0 20px 50px -20px #000;animation:pop-in .2s var(--ease)}
+.account-meta{display:grid;gap:3px;padding:12px 12px 14px;margin-bottom:6px;border-bottom:1px solid var(--line)}
+.account-meta strong{font-size:14px;font-weight:500}
+.account-meta span{font:12px var(--font-num);color:var(--soft)}
+.account-meta small{font:500 11px var(--font-num);letter-spacing:.12em;text-transform:uppercase;color:var(--mute)}
+.account-popover button{display:flex;align-items:center;gap:12px;width:100%;min-height:40px;padding:0 12px;border-radius:var(--r-small);color:var(--ink-2);font-size:13px;text-align:left;transition:background-color var(--t),color var(--t)}
+.account-popover button:hover{background:#1a1a19;color:var(--ink)}
+.account-popover button[data-action=logout]:hover{color:var(--danger)}
+.account-popover .ui-icon{width:16px;height:16px;color:var(--mute)}
+@media (max-width:760px){
   .account-identity{display:none}
-  .account-menu{max-width:none}
-  .account-chevron{margin-left:0}
-  .account-menu summary{gap:7px;padding:5px}
-  .simple-shell main{padding:24px 18px}
-  .simple-shell .page-heading h1{font-size:26px}
-  .simple-shell .empty{padding:32px 20px}
+  .account-avatar{width:30px;height:30px}
 }
-@media(max-width:520px){
-  .simple-header .brand{font-size:19px}
-}
-@media(prefers-reduced-motion:reduce){
-  *,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}
-}
+
+/* Dialog shell (#modal). Screens fill it; see auth.css and security.css for the Account & security content. */
+dialog{width:min(520px,calc(100% - 32px));max-height:calc(100dvh - 48px);padding:30px 32px;border:1px solid var(--line-strong);border-radius:18px;background:#131312;color:var(--ink);box-shadow:0 30px 80px -30px #000;overflow:auto}
+dialog[open]{animation:dialog-in .32s var(--ease)}
+dialog::backdrop{background:#08080799;backdrop-filter:blur(5px);-webkit-backdrop-filter:blur(5px)}
+dialog h2{font-size:24px;font-weight:400;letter-spacing:-.02em;white-space:normal}
+dialog>p{margin:8px 0 22px;font-size:13px}
+.modal-close{position:absolute;right:18px;top:18px;width:32px;height:32px}
+@media (max-width:520px){dialog{padding:26px 20px}}
+
+/* Toast: a light pill with a status dot, 28px from the bottom. */
+#toast{position:fixed;left:50%;bottom:28px;z-index:1000;display:flex;align-items:center;gap:10px;max-width:calc(100vw - 32px);padding:11px 20px 11px 16px;border-radius:var(--r-pill);background:var(--ink);color:var(--on-ink);font-size:13px;font-weight:500;line-height:1.4;box-shadow:0 20px 50px -20px #000;opacity:0;transform:translate(-50%,18px);pointer-events:none;transition:opacity .45s var(--ease),transform .45s var(--ease)}
+#toast::before{content:'';flex:none;width:7px;height:7px;border-radius:50%;background:var(--good-deep)}
+#toast[data-kind=cash]::before{background:#b8893f}
+#toast.visible{opacity:1;transform:translate(-50%,0)}
+@media (max-width:480px){#toast{bottom:calc(96px + env(safe-area-inset-bottom))}}

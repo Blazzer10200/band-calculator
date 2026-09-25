@@ -1,5 +1,22 @@
 # Workspace release — September 2026
 
+## September 25 — New look ("Ledger")
+
+Every screen was restyled: a flat, quiet near-black page with hairline dividers, one big light total and
+every money figure in a monospace face. The only strong colors are the band colors, green for saved and
+amber for cash-outs and unsaved changes. Counting, saving and cash-outs work the same as before.
+
+- **New logo** and sharper home-screen and link-preview images.
+- **Quick math** keeps your last three results (tap one to reuse it), shows the pending operator and has
+  one-tap chips for this count and each band price.
+- **Recent counts** moved under Count bands.
+- **Sign-in** is a split page; two-factor and recovery screens match it.
+- **History** has a cleaner chart (cash-out days marked with an amber square), per-band bars and filters.
+- **Admin** price edits show the old price ("was …") until you save, accounts can be searched, Activity
+  dots are colored by kind and Backups is a two-column page.
+- The Account & security dialog has a Sign out button.
+- Old unused code, styles and images were removed.
+
 ## September 23 — Accounts on the live site (released)
 
 The GitHub Pages site has sign-in again. Accounts live on a Cloudflare Worker

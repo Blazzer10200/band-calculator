@@ -43,7 +43,7 @@ band-scan.js           screenshot OCR (ocr-engine/ocr-worker/ocr-core + eng.trai
                        with neither get one retry at a tighter crop. Contrast is stretched per crop (median =
                        background, so grey hotbar slots read) and long dark runs are painted out as slot borders.
                        Unit votes only accept multiples of 10. Unreconcilable slot -> `qty:null`, surfaced as "?" by
-                       finance-ui; it never guesses. Grid lines within 2 name-heights are merged — the panel is drawn
+                       calculator-ui; it never guesses. Grid lines within 2 name-heights are merged — the panel is drawn
                        in perspective and the drift once split one row in two, double-counting every slot on it.
                        Bench: `.local/scan/` (gitignored) — hand-counted TRUTH over 3 screenshots, `pto-scan-harness`
                        in .claude/launch.json serves it on 4180. Run it before and after any scanner change.
@@ -54,10 +54,17 @@ auth-ui.js             sign in / create account / setup screens, account dialog 
 security-*.js / security-*.mjs                  MFA, recovery codes, encrypted backups, activity log
 LEGACY (production + old tests only, not served to the browser): dev-api.mjs, finance-*.js, model.js,
   access-model.js, hub-model.js, profile-ui.js, member-profile.js, player-picker.js, cloud.js, presence.js
-experience.css         current layout overrides (check here first for layout bugs)
-calculator.css         calculator styles + the --calc-* tokens, scoped to #main-content (all pages)
-app.css                guest pitch, History, Admin
-*.css                  domain stylesheets (auth, security, polish); one rule per line, pruned of unused selectors
+LOOK: "Ledger" (2026-09-25). Flat warm near-black, hairlines not cards, money in Geist Mono; only band colors,
+  green (saved) and amber (cash-out / unsaved) are saturated. Load order = index.html <link> order:
+tokens.css             every color, font, radius, easing, --gutter (40px, 20px at <=760). Change colors here only.
+styles.css             base type, top bar, page frame, footer, .page-heading, .eyebrow, .notice
+polish.css             pill buttons, inputs, checkboxes, select menus, account menu, dialog shell, toast
+experience.css         keyframes (fade-up, dialog-in, skeleton-pulse, shake…) + the reduced-motion kill switch
+auth.css               sign-in split layout (also used by the 2FA, recovery and security-gate screens)
+security.css           reminder bar, Account & security dialog, setup wizard, Activity, Backups
+calculator.css         calculator: hero, tiles, scanner, quick math, confirm modal, arrange mode, mobile sticky bar
+app.css                History, Admin (Prices, Accounts)
+                       CSS is kept free of unused selectors; delete a rule when its markup goes.
 server.mjs             local dev server, loopback only, port 4173
 scripts/dev.ps1        launcher: status/start/restart, PID-guarded
 scripts/sample-server.mjs   sample data server (4174)
@@ -89,7 +96,7 @@ Static files are served from disk: reload after editing browser code. Server imp
 
 ```bash
 npm run check          # node --check on every module (syntax)
-npm test               # full node --test suite (115 tests, SQLite integration included)
+npm test               # full node --test suite (116 tests, SQLite integration included)
 npm run test:api       # the calculator backend (api.mjs)
 npm run test:finance   # legacy: money, bills, presence
 npm run test:access    # legacy: identity, permissions, approvals, auth

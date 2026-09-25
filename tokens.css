@@ -1,0 +1,14 @@
+/* Ledger design tokens. Loaded first; every other stylesheet reads these. */
+@import url('https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600&family=Geist+Mono:wght@400;500&display=swap');
+:root{
+  color-scheme:dark;
+  --bg:#0f0f0e;--bg-raised:#141413;--bg-sunken:#161615;
+  --line:#1f1f1d;--line-soft:#1c1c1b;--line-strong:#2a2a28;--line-hover:#3a3a37;
+  --ink:#edece8;--ink-2:#c9c8c3;--soft:#8e8d88;--mute:#6d6c68;--faint:#46453f;
+  --good:#9ad6a9;--good-deep:#3f8a55;--amber:#e3bd84;--danger:#e8a394;--on-ink:#0f0f0e;
+  --font-ui:'Geist',system-ui,sans-serif;--font-num:'Geist Mono',ui-monospace,monospace;
+  --ease:cubic-bezier(.2,.8,.2,1);--t-fast:.15s;--t:.2s;
+  --r-pill:999px;--r-card:14px;--r-input:10px;--r-small:8px;
+  --gutter:40px;--gutter-mobile:20px;--page:1440px;
+}
+@media (max-width:760px){:root{--gutter:var(--gutter-mobile)}}
