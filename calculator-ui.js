@@ -3,9 +3,10 @@ import {readDraft,saveDraft,clearDraft} from './draft-store.js';
 import {escapeHtml as esc,readUiPreference,saveUiPreference} from './ui-utils.js';
 import {createQuickMath} from './quick-math.js';
 import {scanImage,saveAlias,warmReader,hasLearned,forgetLearned} from './band-scan.js';
+import {openScanViewer,scanRows,shotCounts} from './scan-viewer.js';
 import {createPanelLayout} from './panel-layout.js';
 // Signed in: counts save to the account and add to a running total. Guest: the same calculator, kept on this device only.
-export async function mountCalculator(root,session,{request,onSaved,onClean,canRefresh}){
+export async function mountCalculator(root,session,{request,onSaved,onClean,canRefresh,toast=()=>{}}){
   // Standalone (GitHub Pages): no server, so built-in prices and no account prompts.
   const standalone=!!session.standalone,signedIn=!!session.authenticated,owner=!!session.user?.owner,draftKey=signedIn?session.user.id:'guest';
   let state,confirm=null,message='',undoRemove=null,limit=12;
@@ -13,7 +14,9 @@ export async function mountCalculator(root,session,{request,onSaved,onClean,canR
   const quickMath=createQuickMath();let mathOpen=readUiPreference(sectionKey('quick-math'))!=='closed';
   const layout=createPanelLayout({key:sectionKey('layout'),onChange:()=>syncArrangeBar()});
   const blank=()=>({quantities:{},notes:'',requestId:crypto.randomUUID()});
-  let draft=readDraft(draftKey)||blank(),draftStored=true,savedFlash=false,entered=false,shots=[],scanQueue=null,scanProgress='',scanOthersOpen=false,renderScan=null,noteOpen=false,scanFilled=false;
+  let draft=readDraft(draftKey)||blank(),draftStored=true,savedFlash=false,entered=false,shots=[],scanQueue=null,scanProgress='',scanOthersOpen=false,renderScan=null,noteOpen=false,viewer=null;
+  // Every screenshot's counts are added to the count once, from the viewer or the side panel.
+  const scanFilled=()=>shots.length>0&&shots.every(s=>s.added);
   // A count started as a guest follows you into your new account.
   if(signedIn&&!readDraft(draftKey)){const guest=readDraft('guest');if(guest&&Object.values(guest.quantities).some(v=>Number(v)>0)){draft={quantities:guest.quantities,notes:guest.notes,requestId:crypto.randomUUID()};saveDraft(draftKey,draft);clearDraft('guest');message='The count you started before signing in is right where you left it.';}}
   const reduceMotion=matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -32,7 +35,7 @@ export async function mountCalculator(root,session,{request,onSaved,onClean,canR
     if(root.busy)return;root.busy=true;writes++;root.querySelectorAll('button,input,textarea,select').forEach(el=>el.disabled=true);message='';undoRemove=null;
     const before=heroView().total;
     try{state=await request(path,{method:'POST',body});seen();confirm=null;
-      if(kind==='saved'){clearDraft(draftKey);draft=blank();noteOpen=false;savedFlash=true;shots=[];scanFilled=false;}
+      if(kind==='saved'){clearDraft(draftKey);draft=blank();noteOpen=false;savedFlash=true;shots=[];}
       if(kind==='removed'){undoRemove=path.split('/')[3];message='Count removed.';}
       onClean();await onSaved(kind);render();
       if(kind==='cashed'){const hero=root.querySelector('[data-calc-hero]'),total=hero?.querySelector('.calc-total');hero?.classList.add('is-cashed');if(total)animateMoney(total,before,heroView().total);}
@@ -114,7 +117,7 @@ export async function mountCalculator(root,session,{request,onSaved,onClean,canR
       +'<div class="calc-sticky"><div class="calc-sticky-total"><span>This count</span><strong data-finance-total data-cents="'+total+'">'+money(total)+'</strong></div><div class="calc-sticky-actions">'+clear+saveButton+'</div></div></form></section>';
   }
   function scanHtml(){
-    return '<aside class="panel calc-scan" data-scan-panel><div class="calc-head"><h2>Scan a screenshot</h2></div><p class="calc-scan-copy">Snip your inventory and paste it. It\'s read on this device and nothing is uploaded.</p><label class="scan-zone" data-scan-zone><input type="file" accept="image/*" multiple data-scan-input hidden><span class="scan-zone-title">Drop or paste a screenshot</span><span class="scan-keys"><kbd>Ctrl</kbd><kbd>V</kbd><span>anywhere</span></span></label><div class="scan-tools"><button type="button" class="text-button" data-scan-paste>Paste from clipboard</button>'+(hasLearned()?'<button type="button" class="text-button" data-scan-forget>Forget what the scanner learned</button>':'')+'</div><div class="scan-preview" data-scan-preview hidden><div class="scan-head"><p class="scan-status" data-scan-status></p><button type="button" class="text-button" data-scan-clear>Remove all</button></div><div class="scan-shots" data-scan-shots></div><div class="scan-result" data-scan-result hidden></div></div></aside>';
+    return '<aside class="panel calc-scan" data-scan-panel><div class="calc-head"><h2>Scan a screenshot</h2></div><p class="calc-scan-copy">Snip your inventory and paste it. It\'s read on this device and nothing is uploaded.</p><label class="scan-zone" data-scan-zone><input type="file" accept="image/*" multiple data-scan-input hidden><span class="scan-zone-title">Drop or paste a screenshot</span><span class="scan-keys"><kbd>Ctrl</kbd><kbd>V</kbd><span>anywhere</span></span><span class="scan-zone-pick">or click to choose a file</span></label><div class="scan-tools"><button type="button" class="text-button" data-scan-paste>Paste from clipboard</button>'+(hasLearned()?'<button type="button" class="text-button" data-scan-forget>Forget what the scanner learned</button>':'')+'</div><div class="scan-preview" data-scan-preview hidden><div class="scan-head"><p class="scan-status" data-scan-status></p><button type="button" class="text-button" data-scan-clear>Remove all</button></div><div class="scan-shots" data-scan-shots></div><div class="scan-result" data-scan-result hidden></div></div></aside>';
   }
   function mathHtml(){
     return '<details class="panel calc-math" data-calc-math'+(mathOpen?' open':'')+'><summary><h2>Quick math</h2><span class="calc-math-meta">Nothing here is saved<span class="calc-math-chevron" aria-hidden="true"><i></i></span></span></summary>'+quickMath.html(mathChips())+'</details>';
@@ -215,10 +218,14 @@ export async function mountCalculator(root,session,{request,onSaved,onClean,canR
     const MAX_SHOTS=10,result=root.querySelector('[data-scan-result]'),panel=root.querySelector('[data-scan-panel]'),tools=root.querySelector('.scan-tools');
     const say=text=>{if(shots.length){status.textContent=text;status.classList.add('is-warn');}else error(Error(text));};
     const plural=(n,word)=>n+' '+word+(n===1?'':'s');
-    // Totals per band across every screenshot that has been read.
+    // Totals per band across every screenshot that has been read, with the viewer's edits applied.
     const found=()=>{
       const totals=new Map();
-      for(const s of shots)for(const it of s.scan?.items||[]){const t=totals.get(it.bandId)||{bandId:it.bandId,name:it.name,qty:0,shots:new Set(),unsure:0,unknown:0};if(it.qty===null)t.unknown++;else{t.qty+=it.qty;if(!it.sure)t.unsure++;}t.shots.add(s.id);totals.set(it.bandId,t);}
+      for(const s of shots)for(const r of s.scan?.items?scanRows(s.scan,state.bands):[]){
+        const t=totals.get(r.bandId)||{bandId:r.bandId,name:r.band.name,qty:0,shots:new Set(),unsure:0,unknown:0},edited=!!s.edits&&r.bandId in s.edits,q=edited?s.edits[r.bandId]:r.qty;
+        if(q===null)t.unknown+=Math.max(1,r.unknown);else{t.qty+=q;if(!edited){if(r.unsure)t.unsure++;t.unknown+=r.unknown;}}
+        t.shots.add(s.id);totals.set(r.bandId,t);
+      }
       return state.bands.filter(b=>totals.has(b.id)).map(b=>({...totals.get(b.id),color:b.color,priced:!!b.price}));
     };
     const others=()=>{const seen=new Set();return shots.flatMap(s=>s.scan?.others||[]).filter(t=>{const k=t.toLowerCase();if(seen.has(k))return false;seen.add(k);return true;});};
@@ -229,25 +236,37 @@ export async function mountCalculator(root,session,{request,onSaved,onClean,canR
       const errors=done.filter(s=>s.scan.error).map(s=>'Screenshot '+(shots.indexOf(s)+1)+': '+s.scan.error);
       const summary=(rows.length?'Found '+plural(rows.length,'band')+' in '+plural(done.length,'screenshot'):'No bands spotted'+(busy?' yet':'')+' in '+plural(done.length,'screenshot'))+(busy?', still reading '+busy+' more':'')+'.';
       return '<p class="scan-summary">'+esc(summary)+'</p>'+(errors.length?'<p class="scan-status is-warn">'+esc(errors.join(' '))+'</p>':'')
-        +(rows.length?'<ul class="scan-found">'+chips+'</ul><div class="scan-actions"><button type="button" class="button primary" data-scan-fill'+(rows.some(r=>r.qty&&r.priced)?'':' disabled')+'>'+(scanFilled?'Filled in ✓':'Fill in counts')+'</button><small>Each screenshot adds up, so paste each pocket once.</small></div>':'')
+        +(rows.length?'<ul class="scan-found">'+chips+'</ul><div class="scan-actions"><button type="button" class="button primary" data-scan-fill'+(!scanFilled()&&rows.some(r=>r.qty&&r.priced)?'':' disabled')+'>'+(scanFilled()?'Filled in ✓':'Fill in counts')+'</button><small>Each screenshot adds up, so paste each pocket once.</small></div>':'')
         +(extra.length?'<details class="scan-others"'+(scanOthersOpen?' open':'')+'><summary>Other items read ('+extra.length+')</summary><p>Is one of these a band under another name? Tap it and pick the band. This device remembers the match.</p><div class="scan-chips">'+extra.map(t=>'<button type="button" data-scan-other="'+esc(t)+'">'+esc(t)+'</button>').join('')+'</div><div class="scan-teach" data-scan-teach hidden></div></details>':'');
     };
-    const fillCounts=()=>{
-      const form=root.querySelector('#finance-deposit-form');if(!form)return;
-      let filled=0;const skipped=[];
-      for(const r of found()){
-        const input=form.querySelector('[data-finance-quantity="'+CSS.escape(r.bandId)+'"]');
-        if(!input||input.disabled){skipped.push(r.name);continue;}
-        if(!r.qty)continue;
-        input.value=String(r.qty);filled++;
+    // Adds a screenshot's counts on top of whatever is already in the count; they never replace it.
+    // Returns the bands that could not be added: unreadable ("?") or without a price.
+    const addCounts=lines=>{
+      const form=root.querySelector('#finance-deposit-form');if(!form)return null;
+      let filled=0;const unread=[],unpriced=[],name=id=>state.bands.find(b=>b.id===id)?.name||'A band';
+      for(const {bandId,qty} of lines){
+        const input=form.querySelector('[data-finance-quantity="'+CSS.escape(bandId)+'"]');
+        if(qty===null){unread.push(name(bandId));continue;}
+        if(!qty)continue;
+        if(!input||input.disabled){unpriced.push(name(bandId));continue;}
+        input.value=String(Math.min(MAX_QTY,(Number(input.value)||0)+qty));filled++;
         const tile=input.closest('.calc-tile');if(tile){tile.classList.remove('is-filled');void tile.offsetWidth;tile.classList.add('is-filled');setTimeout(()=>tile.classList.remove('is-filled'),900);}
       }
-      form.dispatchEvent(new Event('input',{bubbles:true}));
-      if(filled){scanFilled=true;const fill=result.querySelector('[data-scan-fill]');if(fill)fill.textContent='Filled in ✓';}
-      const st=root.querySelector('[data-draft-status]');if(st)st.textContent=filled?'Counts filled in from your screenshots. Check them'+(signedIn?', then save.':'.')+(skipped.length?' Skipped '+skipped.join(', ')+': no price set.':''):'Nothing to fill in yet.';
-      form.scrollIntoView({block:'start',behavior:reduceMotion?'auto':'smooth'});
-      form.querySelector('.calc-tile.is-filled input')?.focus({preventScroll:true});
+      if(filled)form.dispatchEvent(new Event('input',{bubbles:true}));
+      return {form,filled,unread,unpriced};
     };
+    const list=names=>names.length<2?names.join(''):names.slice(0,-1).join(', ')+' and '+names.at(-1);
+    const fillShots=(targets,linesFor)=>{
+      const lines=targets.flatMap(linesFor),done=addCounts(lines);if(!done)return;
+      for(const s of targets)s.added=true;
+      const {form,filled,unread,unpriced}=done;
+      const missed=[...(unread.length?[list(unread)+(unread.length===1?' was':' were')+' not readable, add '+(unread.length===1?'it':'them')+' by hand.']:[]),...(unpriced.length?['Skipped '+list(unpriced)+': no price set.']:[])].join(' ');
+      toast(!filled?(missed||'Nothing to add from this screenshot.'):missed?'Counts added. '+missed:'Counts added from your screenshot'+(targets.length>1?'s':'')+'. Check them'+(signedIn?', then save.':'.'));
+      const st=root.querySelector('[data-draft-status]');if(st&&filled)st.textContent='Counts added from your screenshots. Check them'+(signedIn?', then save.':'.');
+      renderShots();
+      if(filled){form.scrollIntoView({block:'start',behavior:reduceMotion?'auto':'smooth'});form.querySelector('.calc-tile.is-filled input')?.focus({preventScroll:true});}
+    };
+    const fillCounts=()=>fillShots(shots.filter(s=>s.scan?.items&&!s.added),s=>shotCounts(s,state.bands));
     const bindResults=()=>{
       result.querySelector('[data-scan-fill]')?.addEventListener('click',fillCounts);
       result.querySelector('.scan-others')?.addEventListener('toggle',e=>{scanOthersOpen=e.currentTarget.open;});
@@ -265,9 +284,10 @@ export async function mountCalculator(root,session,{request,onSaved,onClean,canR
       const kb=Math.round(shots.reduce((n,s)=>n+s.size,0)/1024),busy=shots.some(s=>s.scan?.busy);
       status.textContent=shots.length?(busy?scanProgress||'Reading…':plural(shots.length,'screenshot')+' · '+(kb>1024?(kb/1024).toFixed(1)+' MB':kb+' KB')):'';
       status.classList.toggle('is-busy',busy);
-      strip.innerHTML=shots.map((s,i)=>'<figure class="scan-shot'+(s.id===fresh?' is-new':'')+(s.scan?.busy?' is-reading':'')+'" data-shot="'+s.id+'"><img src="'+s.src+'" alt="Screenshot '+(i+1)+'" decoding="async"><figcaption>'+(i+1)+'</figcaption><button type="button" data-shot-remove="'+s.id+'" aria-label="Remove screenshot '+(i+1)+'">×</button></figure>').join('')+(shots.length<MAX_SHOTS?'<button type="button" class="scan-add" data-scan-add>+ Add</button>':'');
-      strip.querySelectorAll('[data-shot-remove]').forEach(b=>b.addEventListener('click',()=>{shots=shots.filter(s=>s.id!==b.dataset.shotRemove);scanFilled=false;renderShots();}));
+      strip.innerHTML=shots.map((s,i)=>'<figure class="scan-shot'+(s.id===fresh?' is-new':'')+(s.scan?.busy?' is-reading':'')+'" data-shot="'+s.id+'"><button type="button" class="scan-shot-open" data-shot-open="'+s.id+'" aria-label="Open screenshot '+(i+1)+'"><img src="'+s.src+'" alt="" decoding="async"></button><figcaption>'+(i+1)+'</figcaption><button type="button" data-shot-remove="'+s.id+'" aria-label="Remove screenshot '+(i+1)+'">×</button></figure>').join('')+(shots.length<MAX_SHOTS?'<button type="button" class="scan-add" data-scan-add>+ Add</button>':'');
+      strip.querySelectorAll('[data-shot-remove]').forEach(b=>b.addEventListener('click',()=>{shots=shots.filter(s=>s.id!==b.dataset.shotRemove);renderShots();}));
       strip.querySelector('[data-scan-add]')?.addEventListener('click',()=>input.click());
+      strip.querySelectorAll('[data-shot-open]').forEach(b=>b.addEventListener('click',()=>{const s=shots.find(x=>x.id===b.dataset.shotOpen);if(s)view(s,b.getBoundingClientRect());}));
       result.innerHTML=resultHtml();result.hidden=!result.innerHTML;bindResults();
     };
     renderScan=renderShots;
@@ -282,22 +302,40 @@ export async function mountCalculator(root,session,{request,onSaved,onClean,canR
           const label=()=>'Screenshot '+(shots.indexOf(s)+1)+' of '+shots.length;
           scanProgress=label()+': reading…';renderScan?.();
           try{
-            const r=await scanImage(s.file,state.bands,{onProgress:p=>{scanProgress=p.phase==='load'?p.text:label()+': '+p.text;const st=root.querySelector('[data-scan-status]');if(st&&st.classList.contains('is-busy'))st.textContent=scanProgress;}});
+            const r=await scanImage(s.file,state.bands,{onProgress:p=>{scanProgress=p.phase==='load'?p.text:label()+': '+p.text;const st=root.querySelector('[data-scan-status]');if(st&&st.classList.contains('is-busy'))st.textContent=scanProgress;if(viewer?.shot===s)viewer.update(p.text);}});
             if(shots.includes(s))s.scan=r;
           }catch(e){if(shots.includes(s))s.scan={error:e?.message||'Could not read this screenshot.'};}
           renderScan?.();
+          if(viewer?.shot===s)viewer.update();
         }
         scanProgress='';
       })().finally(()=>{scanQueue=null;renderScan?.();});
     };
+    // The viewer opens on the newest screenshot and follows its read; the side panel keeps the rest.
+    const view=(shot,from)=>{
+      viewer?.close();
+      const open=openScanViewer({shot,bands:state.bands,from,reduceMotion,
+        onFill:lines=>{if(!shot.added)fillShots([shot],()=>lines);},
+        onAgain:()=>root.querySelector('[data-scan-input]')?.click(),
+        onAlias:(text,bandId)=>{saveAlias(text,bandId);for(const s of shots)if(s.scan?.others?.some(o=>o.toLowerCase()===text.toLowerCase()))s.scan=undefined;queueScan();open.update();},
+        onClose:()=>{if(viewer===open)viewer=null;}});
+      viewer=open;
+      addEventListener('hashchange',()=>open.close(),{once:true});
+    };
     const load=files=>{
+      let newest=null;
+      const from=(zone.hidden?panel:zone).getBoundingClientRect();
       for(const file of [...files]){
         if(!file||!file.type.startsWith('image/')){say('That is not an image. Paste or drop a PNG or JPG screenshot.');continue;}
         if(file.size>12*1024*1024){say('That screenshot is over 12 MB. Crop it or use a smaller one.');continue;}
         if(shots.length>=MAX_SHOTS){say('That is '+MAX_SHOTS+' screenshots already. Remove one to add another.');break;}
         // Keep the original file for detection later; only a small thumbnail is drawn on the page.
-        thumbnail(file).then(src=>{const id=crypto.randomUUID();scanFilled=false;shots.push({id,src,file,name:file.name||'pasted.png',size:file.size,at:Date.now()});renderShots(id);queueScan();}).catch(()=>say('That image could not be read. Try a PNG or JPG screenshot.'));
+        const pending=thumbnail(file).then(src=>{const shot={id:crypto.randomUUID(),src,file,name:file.name||'pasted.png',size:file.size,at:Date.now()};shots.push(shot);renderShots(shot.id);queueScan();return shot;});
+        newest=pending;
+        pending.catch(()=>say('That image could not be read. Try a PNG or JPG screenshot.'));
       }
+      // A failed thumbnail was already reported above; anything the viewer throws should surface.
+      newest?.then(shot=>{if(root.isConnected&&shots.includes(shot))view(shot,from);},()=>{});
     };
     renderShots();
     // Load the reader while nothing else is going on so the first screenshot is read right away.
@@ -307,7 +345,7 @@ export async function mountCalculator(root,session,{request,onSaved,onClean,canR
     for(const type of ['dragenter','dragover'])panel.addEventListener(type,e=>{e.preventDefault();panel.classList.add('is-over');});
     panel.addEventListener('dragleave',e=>{if(!panel.contains(e.relatedTarget))panel.classList.remove('is-over');});
     panel.addEventListener('drop',e=>{e.preventDefault();panel.classList.remove('is-over');load(e.dataTransfer.files);});
-    root.querySelector('[data-scan-clear]')?.addEventListener('click',()=>{shots=[];scanFilled=false;renderShots();});
+    root.querySelector('[data-scan-clear]')?.addEventListener('click',()=>{shots=[];renderShots();});
     paste?.addEventListener('click',async()=>{
       if(!navigator.clipboard?.read){say('This browser cannot read the clipboard from a button. Press Ctrl+V on the page instead.');return;}
       try{

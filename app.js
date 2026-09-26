@@ -56,7 +56,7 @@ function render(){
   $('#app').innerHTML=`<button type="button" class="skip-link" data-action="skip-content">Skip to content</button>${header()}<div class="simple-shell"><div class="workspace-content"><main id="main-content" tabindex="-1">${page==='admin'?securityNudge(session):''}<div id="live-sync-note" class="notice" role="status" hidden></div><div id="${pages[page].panel}"><p class="page-loading">Loading…</p></div></main></div><footer><span id="connection-status">${storageLabel()}</span><div class="footer-links"><button class="text-button" data-action="reload">Reload latest</button><span id="release-status"></span></div></footer></div>`;
   mountReleaseNotice($('#release-status'),()=>!pageDirty&&!panel()?.busy);
   const root=panel(),finish=()=>{if(pageChanged&&root.isConnected){revealContent($('main'));$('main').focus({preventScroll:true});}};
-  const mounted=page==='calculator'?mountCalculator(root,session,{request:authRequest,canRefresh:canApplyRemote,onClean:()=>{},onSaved:kind=>toast({saved:'Count saved.',removed:'Count removed.',restored:'Count restored.',cashed:'Cashed out. The running total starts over.',undone:'Cash-out undone.'}[kind]||'Saved.',kind==='cashed'?'cash':'')})
+  const mounted=page==='calculator'?mountCalculator(root,session,{request:authRequest,canRefresh:canApplyRemote,toast,onClean:()=>{},onSaved:kind=>toast({saved:'Count saved.',removed:'Count removed.',restored:'Count restored.',cashed:'Cashed out. The running total starts over.',undone:'Cash-out undone.'}[kind]||'Saved.',kind==='cashed'?'cash':'')})
     :page==='history'?mountHistory(root,session,{request:authRequest})
     :mountAdmin(root,session,{request:authRequest,toast,onDirty:value=>{pageDirty=value;}});
   mounted.then(finish);

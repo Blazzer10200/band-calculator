@@ -11,8 +11,7 @@ Browser (index.html + *.js/*.css, served from disk)
   └─ api-config.js picks the backend from <meta> tags the build injects
        ├─ api.mjs → server.mjs → SQLite .local/pto-dev.sqlite          (localhost:4173, YOUR private data)
        ├─ api.mjs → scripts/sample-server.mjs → in-memory fake data     (localhost:4174, disposable)
-       ├─ api.mjs → cloudflare-worker.mjs (SQLite Durable Object) → band-calculator.blazzer.workers.dev   (PRODUCTION accounts)
-       └─ cloud-api.mjs → worker.js → Cloudflare D1                     (ChatGPT Sites, RETIRED 2026-09-22: old roster API, unused)
+       └─ api.mjs → cloudflare-worker.mjs (SQLite Durable Object) → band-calculator.blazzer.workers.dev   (PRODUCTION accounts)
 GitHub Pages build (dist/pages): <meta name="band-api"> = the Worker origin (also added to CSP connect-src).
   cloudflare-edge.mjs: CORS for blazzer10200.github.io, SameSite=None;Partitioned cookie, bearer fallback via
   X-PTO-Session (token in sessionStorage). BAND_API= (empty) builds the old calculator-only site (<meta band-standalone>).
@@ -21,10 +20,10 @@ GitHub Pages build (dist/pages): <meta name="band-api"> = the Worker origin (als
   Sign-ups never wait on the Owner when SETUP_CODE is set. Hashing runs in the Durable Object (30 s CPU), so strong
   local hashes are fine there. Local accounts moved in 2026-09-23 via scripts/export-accounts.mjs → one-time
   BAND_SEED secret (loaded only into a DB with no users; deleted after). Put the secret BEFORE deploying new code.
-  The stash "WIP: Worker backend port" is the abandoned cloud-api.mjs route; superseded, not needed.
+  The stash "WIP: Worker backend port" is an abandoned route (ChatGPT Sites stack, deleted 2026-09-25); not needed.
 ```
 
-`api.mjs` is the new backend. On first start against an old database it imports bands, deposits (as counts) and payouts (as cash-outs) once (`meta.import_v1`). `calc-model.js` is shared by the browser and `api.mjs`. The legacy `dev-api.mjs` + `*-model.js` + `finance-*` modules stay on disk only because `cloud-api.mjs`, the legacy tests and `import_v1` tests use them. The browser no longer loads them.
+`api.mjs` is the new backend. On first start against an old database it imports bands, deposits (as counts) and payouts (as cash-outs) once (`meta.import_v1`). `calc-model.js` is shared by the browser and `api.mjs`. The legacy `dev-api.mjs` + `*-model.js` + `finance-*` modules stay on disk only because the legacy tests and `import_v1` tests use them. The browser no longer loads them.
 
 ## Map
 
@@ -42,18 +41,29 @@ band-scan.js           screenshot OCR (ocr-engine/ocr-worker/ocr-core + eng.trai
                        reads "xN" + weight, cross-checking them (100 g per band, violet 200 g); slots that come back
                        with neither get one retry at a tighter crop. Contrast is stretched per crop (median =
                        background, so grey hotbar slots read) and long dark runs are painted out as slot borders.
-                       Unit votes only accept multiples of 10. Unreconcilable slot -> `qty:null`, surfaced as "?" by
-                       calculator-ui; it never guesses. Grid lines within 2 name-heights are merged — the panel is drawn
-                       in perspective and the drift once split one row in two, double-counting every slot on it.
-                       Bench: `.local/scan/` (gitignored) — hand-counted TRUTH over 3 screenshots, `pto-scan-harness`
-                       in .claude/launch.json serves it on 4180. Run it before and after any scanner change.
+                       Unit votes only accept multiples of 10. Unreconcilable slot -> `qty:null` ("?"); a bare
+                       left number with no x/weight is kept only as `sure:false` ("double-check"). Grid lines within
+                       2 name-heights are merged — the panel is drawn in perspective and the drift once split one row
+                       in two, double-counting every slot on it.
+                       PICTURE VIEW (no names, no weights; used only when pass 1 finds no names): slots come from the
+                       coloured bar under each filled slot (`findBars`, ±15% of the usual length, so the weight meter
+                       is ignored). Money = grey-green bill pixels; the band = the paper stripe's hue/sat (`STRIPES`,
+                       white by share, else Loose change). Count = the boxed badge top-right (`findBadge`), all badges
+                       read on one line at two sizes after a hard threshold (the contrast stretch broke tiny digits);
+                       both reads must agree to be sure. No badge = 1. Every item carries `box` + `confidence`.
+                       Bench: `.local/scan/` (gitignored) — hand-counted TRUTH over 8 screenshots (shot7/8 = badge
+                       view), `pto-scan-harness` in .claude/launch.json serves it on 4180; `viewer.html` there runs
+                       the real scan viewer on them. Run the bench before and after any scanner change.
+scan-viewer.js         the modal that opens when a screenshot is added: screenshot with a box per slot (hover a row
+                       to zoom), editable counts, "Fill in counts" (adds to the tiles once per screenshot), "Not bands"
+                       chips to teach a name. Reads nothing itself; draws what band-scan.js returned.
 quick-math.js          plain calculator panel
 panel-layout.js        "Arrange panels" mode: drag/resize the calculator panels, saved per account.
                        Only active at 820px+; x/w are fractions of the workspace width, y/h are pixels.
 auth-ui.js             sign in / create account / setup screens, account dialog (display name + security)
 security-*.js / security-*.mjs                  MFA, recovery codes, encrypted backups, activity log
-LEGACY (production + old tests only, not served to the browser): dev-api.mjs, finance-*.js, model.js,
-  access-model.js, hub-model.js, profile-ui.js, member-profile.js, player-picker.js, cloud.js, presence.js
+LEGACY (old tests + import_v1 test only, not served to the browser): dev-api.mjs, finance-*.js, model.js,
+  access-model.js, hub-model.js, profile-ui.js, member-profile.js, player-picker.js, presence.js
 LOOK: "Ledger" (2026-09-25). Flat warm near-black, hairlines not cards, money in Geist Mono; only band colors,
   green (saved) and amber (cash-out / unsaved) are saturated. Load order = index.html <link> order:
 tokens.css             every color, font, radius, easing, --gutter (40px, 20px at <=760). Change colors here only.
@@ -62,14 +72,14 @@ polish.css             pill buttons, inputs, checkboxes, select menus, account m
 experience.css         keyframes (fade-up, dialog-in, skeleton-pulse, shake…) + the reduced-motion kill switch
 auth.css               sign-in split layout (also used by the 2FA, recovery and security-gate screens)
 security.css           reminder bar, Account & security dialog, setup wizard, Activity, Backups
-calculator.css         calculator: hero, tiles, scanner, quick math, confirm modal, arrange mode, mobile sticky bar
+calculator.css         calculator: hero, tiles, scanner, scan viewer (.sv-*), quick math, confirm modal, arrange mode,
+                       mobile sticky bar
 app.css                History, Admin (Prices, Accounts)
                        CSS is kept free of unused selectors; delete a rule when its markup goes.
 server.mjs             local dev server, loopback only, port 4173
 scripts/dev.ps1        launcher: status/start/restart, PID-guarded
 scripts/sample-server.mjs   sample data server (4174)
 build*.mjs / client-files.mjs   fingerprinted release build → dist/
-db/ drizzle/           schema + generated migrations
 docs/DEVELOPMENT.md    routes, stable data-* selectors, sample accounts
 .local/                PRIVATE: sqlite db, logs, baselines, old helpers. Gitignored. Never publish, never print.
 ```
@@ -96,11 +106,11 @@ Static files are served from disk: reload after editing browser code. Server imp
 
 ```bash
 npm run check          # node --check on every module (syntax)
-npm test               # full node --test suite (116 tests, SQLite integration included)
+npm test               # full node --test suite (96 tests, SQLite integration included)
 npm run test:api       # the calculator backend (api.mjs)
 npm run test:finance   # legacy: money, bills, presence
 npm run test:access    # legacy: identity, permissions, approvals, auth
-npm run verify:build   # check + Worker build + Pages build + module-graph verify. Builds only, never publishes.
+npm run verify:build   # check + Pages build + module-graph verify. Builds only, never publishes.
 ```
 
 CSS/copy-only change: inspect the page at phone + desktop width, then `git diff --check`. JS change: `npm run check` + the focused suite for that domain. Anything touching both API adapters or storage: full `npm test`.

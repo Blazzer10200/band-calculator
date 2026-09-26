@@ -165,6 +165,112 @@ export function gridCells(grid,names=[]){
 export const cellAt=(grid,list,cell)=>list.find(n=>Math.abs(n.x0-cell.x0)<grid.colPitch*.5&&Math.abs(n.y0-cell.y0)<grid.rowPitch*.5);
 const nameRect=(cell,grid,unit)=>({x0:cell.x0-.35*unit,x1:cell.x0+.94*grid.colPitch,y0:cell.y0-.55*unit,y1:cell.y0+1.7*unit});
 
+// --- slots by picture ----------------------------------------------------
+// The game has a second inventory style with no names and no weights: just the picture and a boxed
+// count in the top-right corner (no box at all for one item). What both styles do draw is a thin
+// coloured bar along the bottom of every filled slot, and that bar is the steadiest thing on screen:
+// one straight line, the width of the slot, with dark on both sides. The panel is drawn in slight
+// perspective, so each bar comes out as a staircase of short runs that get joined back up here.
+// Works on raw pixels ({width,height,data} as from getImageData) so it can be tested without a canvas.
+const lit=(d,i)=>Math.max(d[i],d[i+1],d[i+2])>150;
+export function findBars({width:W,height:H,data:d}){
+  const runs=[];
+  for(let y=1;y<H-1;y++){
+    let s=-1;
+    for(let x=0;x<=W;x++){
+      const on=x<W&&lit(d,(y*W+x)*4);
+      if(on&&s<0)s=x;
+      else if(!on&&s>=0){
+        const L=x-s;
+        // A bar is thin: every column of it is only a few pixels tall. Text is broken up by gaps
+        // before it gets this long, and the stacks of bills in the pictures are far taller.
+        if(L>=12){
+          let thin=0,n=0;
+          for(let k=s;k<x;k+=2){n++;let t=1;for(const dy of [-1,1])for(let yy=y+dy;yy>=0&&yy<H&&t<12&&lit(d,(yy*W+k)*4);yy+=dy)t++;if(t<=Math.max(6,L*.08))thin++;}
+          if(thin>=n*.8)runs.push({y,x0:s,x1:x});
+        }
+        s=-1;
+      }
+    }
+  }
+  // Join runs that touch from one row to the next into one bar.
+  const bars=[];
+  for(const r of runs){
+    const b=bars.find(b=>r.y-b.yLast<=2&&r.x0<=b.x1+3&&b.x0<=r.x1+3);
+    if(b){if(r.x0<b.x0){b.x0=r.x0;b.yl=r.y;}if(r.x1>b.x1){b.x1=r.x1;b.yr=r.y;}b.yLast=r.y;b.y0=Math.min(b.y0,r.y);b.y1=Math.max(b.y1,r.y);}
+    else bars.push({x0:r.x0,x1:r.x1,y0:r.y,y1:r.y,yl:r.y,yr:r.y,yLast:r.y});
+  }
+  const long=bars.filter(b=>b.x1-b.x0>=30);
+  if(!long.length)return [];
+  // Slot bars are all one length; the storage weight meter and other rules are not.
+  const lengths=long.map(b=>b.x1-b.x0).sort((a,b)=>a-b),usual=lengths[lengths.length>>1];
+  // Perspective shortens the far columns by a few percent; the weight meter is a quarter shorter.
+  return long.filter(b=>Math.abs(b.x1-b.x0-usual)<=usual*.15).map(({yLast,...b})=>b);
+}
+// Each bar closes off one slot; the slot is about as tall as the bars are long, or one row pitch
+// less the gap when there is more than one row to measure it from.
+export function slotBoxes(bars){
+  if(!bars.length)return [];
+  const L=bars.map(b=>b.x1-b.x0).sort((a,b)=>a-b)[bars.length>>1];
+  const rows=cluster(bars.map(b=>(b.y0+b.y1)/2),L*.3),pitch=medianGap(rows);
+  const h=Math.round(pitch>L*.6?Math.min(pitch*.93,L*1.1):L);
+  return bars.map(b=>({x:b.x0-2,y:b.y0-h,w:b.x1-b.x0+4,h:h+(b.y1-b.y0)+2,bar:b})).sort((p,q)=>p.y-q.y||p.x-q.x);
+}
+const hsv=(r,g,b)=>{const mx=Math.max(r,g,b),mn=Math.min(r,g,b),c=mx-mn;let h=0;if(c){h=mx===r?((g-b)/c)%6:mx===g?(b-r)/c+2:(r-g)/c+4;h*=60;if(h<0)h+=360;}return [h,mx?c/mx:0,mx/255];};
+// The colour of the paper band around the bills, from the middle of the picture: the bills
+// themselves are a washed-out grey-green, so the band is whatever saturated colour dominates.
+// `paper` is how much of the picture is that grey-green: every stack of money has plenty, nothing
+// else in the inventory has any.
+export function stripeColor({width:W,height:H,data:d},box){
+  const x0=Math.round(box.x+box.w*.18),x1=Math.round(box.x+box.w*.82),y0=Math.round(box.y+box.h*.28),y1=Math.round(box.y+box.h*.74);
+  const bins=new Float64Array(36),hues=Array.from({length:36},()=>[0,0,0]);let total=0,bright=0,paper=0;
+  for(let y=Math.max(0,y0);y<Math.min(H??Infinity,y1);y++)for(let x=Math.max(0,x0);x<Math.min(W,x1);x++){
+    const i=(y*W+x)*4,[h,s,v]=hsv(d[i],d[i+1],d[i+2]);total++;
+    if(v>.82&&s<.12)bright++;
+    if(s>=.04&&s<.3&&v>.45&&h>=50&&h<=170)paper++;
+    if(s>=.3&&v>=.3){const k=Math.floor(h/10)%36;bins[k]++;hues[k][0]+=h;hues[k][1]+=s;hues[k][2]+=v;}
+  }
+  const win=j=>[(j+35)%36,j,(j+1)%36];
+  let k=0;for(let j=1;j<36;j++){const a=win(j).reduce((n,i)=>n+bins[i],0),b=win(k).reduce((n,i)=>n+bins[i],0);if(a>b||(a===b&&bins[j]>bins[k]))k=j;}
+  // Averaged over the whole window; a hue near 0/360 is unwrapped first so red does not average to cyan.
+  let n=0,hs=0,ss=0,vs=0;
+  for(const i of win(k)){n+=bins[i];hs+=hues[i][0]+(k<=1&&i>=35?-360*bins[i]:k>=35&&i<=0?360*bins[i]:0);ss+=hues[i][1];vs+=hues[i][2];}
+  const share=v=>total?+(v/total).toFixed(3):0;
+  return {hue:n?Math.round((hs/n+360)%360):null,sat:n?+(ss/n).toFixed(2):0,val:n?+(vs/n).toFixed(2):0,share:share(n),white:share(bright),paper:share(paper)};
+}
+// The in-game paper colours, measured off real screenshots. They are not the swatches the calculator
+// draws (those are pastel so they read on a dark page), so the band is found by the colour word in its
+// name. Purple and Violet sit only ten degrees apart; Violet is the far stronger colour.
+const STRIPES=[['brown',30,.42],['yellow',53,.6],['blue',228,.57],['purple',314,.35],['violet',324,.54]];
+export function stripeBand(c,bands){
+  if(!c||c.paper<.06)return null;// not a stack of money
+  const named=re=>bands.find(b=>re.test(b.name))||null;
+  // White paper has no hue at all, and loose change has no paper band.
+  if(c.hue===null||c.share<.01)return named(c.white>=.015?/white/i:/loose|change|coin/i);
+  let best=null,cost=3;
+  for(const b of bands){
+    const k=STRIPES.find(([word])=>b.name.toLowerCase().includes(word));
+    if(!k)continue;
+    const dh=Math.abs(c.hue-k[1]),d=Math.min(dh,360-dh)/10+Math.abs(c.sat-k[2])*20;
+    if(d<cost){cost=d;best=b;}
+  }
+  return best;
+}
+// The boxed count in a slot's top-right corner: a small cluster of bright, colourless digits. None at all
+// means one item. Returns the digits' bounds in image pixels, or null.
+export function findBadge({width:W,height:H,data:d},box){
+  // Top fifth, right third: the bills are drawn lower down, and their highlights are never this white.
+  const x0=Math.max(0,Math.round(box.x+box.w*.65)),x1=Math.min(W,Math.round(box.x+box.w)),y0=Math.max(0,Math.round(box.y)),y1=Math.min(H,Math.round(box.y+box.h*.2));
+  let n=0,bx0=Infinity,bx1=-1,by0=Infinity,by1=-1;
+  for(let y=y0;y<y1;y++)for(let x=x0;x<x1;x++){
+    const i=(y*W+x)*4,[,s,v]=hsv(d[i],d[i+1],d[i+2]);
+    if(v>.72&&s<.12){n++;bx0=Math.min(bx0,x);bx1=Math.max(bx1,x);by0=Math.min(by0,y);by1=Math.max(by1,y);}
+  }
+  // Digits are small: a bright patch as tall as a fifth of the slot is part of the picture, not a count.
+  if(n<6||by1-by0>box.h*.2||bx1-bx0>box.w*.35)return null;
+  return {x0:bx0,y0:by0,x1:bx1+1,y1:by1+1};
+}
+
 // --- counts --------------------------------------------------------------
 // One crop per matched name: from just left of the name to 90% of the column pitch, covering the
 // count on the left and the weight on the right. The inventory panel is drawn in perspective, so the
@@ -210,15 +316,16 @@ async function readTiles(worker,src,rows){
   // honouring it, and sparse mode throws the short "x5" away as noise. Look-alikes are fixed in parseRow.
   await worker.setParameters({tessedit_pageseg_mode:PSM.SINGLE_BLOCK,tessedit_char_whitelist:''});
   const {data}=await worker.recognize(await toBlob(canvas),{},{blocks:true});
-  const words=(data.blocks||[]).flatMap(b=>b.paragraphs.flatMap(p=>p.lines.flatMap(l=>l.words))).map(w=>({text:w.text,x:w.bbox.x0,y:(w.bbox.y0+w.bbox.y1)/2}));
+  const words=(data.blocks||[]).flatMap(b=>b.paragraphs.flatMap(p=>p.lines.flatMap(l=>l.words))).map(w=>({text:w.text,x:w.bbox.x0,y:(w.bbox.y0+w.bbox.y1)/2,conf:w.confidence}));
   const tiles=at.map((a,i)=>({words:words.filter(w=>w.y>=a.y-gap/2&&w.y<a.y+a.h+gap/2).sort((p,q)=>p.x-q.x),split:gap+boxes[i].w*zoom*.42}));
   globalThis.__scanDebug?.push(canvas.toDataURL());// off unless a dev sets it; .local/scan/crops.html renders the strips
   canvas.width=canvas.height=0;// the strip can run to tens of megabytes; let it go before the next pass
   return tiles;
 }
 // The count is the left third of the row, the weight the right part.
+const meanConf=words=>words.length?words.reduce((n,w)=>n+w.conf,0)/words.length/100:0;
 const readRows=async(worker,src,rows)=>(await readTiles(worker,src,rows)).map(({words,split})=>
-  ({left:words.filter(w=>w.x<split).map(w=>w.text).join(' '),right:words.filter(w=>w.x>=split).map(w=>w.text).join(' ')}));
+  ({left:words.filter(w=>w.x<split).map(w=>w.text).join(' '),right:words.filter(w=>w.x>=split).map(w=>w.text).join(' '),conf:meanConf(words)}));
 // Second look at the slots whose name the first pass missed: the whole crop is one name.
 const readNames=async(worker,src,rows)=>(await readTiles(worker,src,rows)).map(({words})=>words.map(w=>w.text).join(' ').trim());
 // Left "x5" → count 5; right "500 g" → 500 grams ("1.00 kg" → 1000). Hotbar slots also print their
@@ -238,12 +345,15 @@ export function parseRow({left,right}){
   // came back as "100k" would turn a stack of ten into a thousand, so that weight is thrown away.
   if(weight){
     const v=Number(weight[1]),dot=weight[1].includes('.'),kilos=/k/.test(r)||dot;
-    if(!kilos)grams=Math.round(v);
-    else if(dot)grams=Math.round(v*1000);
+    if(!kilos)grams=Math.round(v)||null;// nothing weighs 0 g: that is "200g" with the 2 lost
+    else if(dot)grams=Math.round(v*1000)||null;
   }
+  // The "x" is the thinnest glyph on the row and sometimes goes missing on its own, leaving "2". That is
+  // kept aside as a guess for when nothing else on the row could be read.
+  const bareNumber=count?null:l.match(/^\s*(\d{1,3})\s*$/);
   // The game draws no count at all for a single item, so a count corner with nothing in it is itself
   // the answer - and it is what tells a lone 200 g band apart from a garbled stack of them.
-  return {n:count?Number(count[1].replace(/\./g,'')):null,grams,bare:!left.trim()};
+  return {n:count?Number(count[1].replace(/\./g,'')):null,grams,bare:!left.trim(),guess:bareNumber?Number(bareNumber[1]):null};
 }
 // Grams per item for a band, learned from any slot that showed both a count and a weight - or from a
 // single item, whose whole weight is one item's worth.
@@ -279,7 +389,7 @@ export function commonUnit(rows){
 const sane=q=>Number.isFinite(q)&&q>=1&&q<=9999;
 // `borrowed` means the unit is the rest of the screenshot's, not this band's own: good enough to
 // suggest a number, not to vouch for it.
-export function resolveCount({n,grams,bare},unit,borrowed=false){
+export function resolveCount({n,grams,bare,guess=null},unit,borrowed=false){
   const weighed=grams&&unit?grams/unit:null;
   if(n===null&&bare&&grams)return {qty:1,sure:true};// an empty count corner beside a weight means one
   if(n!==null){
@@ -291,6 +401,7 @@ export function resolveCount({n,grams,bare},unit,borrowed=false){
   }
   if(weighed!==null){const q=Math.round(weighed);return sane(q)?{qty:q,sure:!borrowed&&Math.abs(weighed-q)<.05}:{qty:null,sure:false};}
   if(grams)return {qty:1,sure:false};// nothing is drawn for a single item, so a weight alone means one
+  if(guess!==null&&guess>=2&&sane(guess))return {qty:guess,sure:false};// "x2" that lost its x: say it, but flag it
   return {qty:null,sure:false};
 }
 
@@ -317,13 +428,22 @@ export async function scanImage(file,bands,{onProgress}={}){
   // Item names share one font: their typical height is the yardstick for everything around them.
   const heights=lines.map(l=>l.y1-l.y0).sort((a,b)=>a-b);
   src.unit=Math.max(8,heights.length?heights[heights.length>>1]:0);
-  const names=[],others=[],seen=new Set();
+  // Slot outlines, from the coloured bar under every filled slot. The viewer draws them, and in the
+  // inventory style with no names they are the only way in.
+  const pixels=imagePixels(src.bitmap),boxes=slotBoxes(findBars(pixels));
+  const boxAt=(x,y)=>boxes.find(b=>x>=b.x-6&&x<=b.x+b.w&&y>=b.y&&y<=b.y+b.h+6)||null;
+  const names=[],others=[],othersAt=[],seen=new Set();
   // Anything read that is not a band is offered back to the user, who can tell the scanner it is one.
-  const addOther=text=>{const key=normalizeName(text).join(' ');if(key&&!seen.has(key)){seen.add(key);others.push(text);}};
+  const addOther=(text,r)=>{
+    const key=normalizeName(text).join(' ');if(!key||seen.has(key))return;
+    seen.add(key);others.push(text);
+    const x=r.x0/src.scale,y=r.y0/src.scale;
+    othersAt.push({text,box:boxAt(x,y)||{x:Math.round(x),y:Math.round(y),w:Math.round((r.x1-r.x0)/src.scale),h:Math.round((r.y1-r.y0)/src.scale)}});
+  };
   for(const line of lines){
     const band=matchBand(line.text,bands,aliases);
     if(band){names.push({...line,band});continue;}
-    if(line.confidence>=75&&/[a-z]{4}/i.test(line.text))addOther(line.text);
+    if(line.confidence>=75&&/[a-z]{4}/i.test(line.text))addOther(line.text,line);
   }
   // The sweep over the whole screenshot is good at finding WHERE the slots are and unreliable at
   // reading them: it has to take every name at whatever size the screenshot happens to be, next to
@@ -348,13 +468,19 @@ export async function scanImage(file,bands,{onProgress}={}){
       // it, and a real measurement beats a position averaged out of the grid by a few pixels.
       if(band)slots.push(prior?{...prior,band}:{text,x0:cell.x0,y0:cell.y0,x1:cell.x0+grid.colPitch,y1:cell.y0+src.unit,band});
       else if(prior)slots.push(prior);
-      else if(text&&/[a-z]{4}/i.test(text))addOther(text);
+      else if(text&&/[a-z]{4}/i.test(text))addOther(text,nameRect(cell,grid,src.unit));
     });
   }
   let items=[];
+  if(!slots.length&&boxes.length){
+    phase='counts';onProgress?.({phase:'read',text:'Reading counts…'});
+    items=await readPictures(worker,src,pixels,boxes,bands,othersAt);
+  }
+  // A slot the bars missed still gets an outline, cut from the grid around its name.
+  const gridBox=line=>grid?{x:Math.round((line.x0-.4*src.unit)/src.scale),y:Math.round((line.y1+.5*src.unit-.93*grid.rowPitch)/src.scale),w:Math.round(.93*grid.colPitch/src.scale),h:Math.round(.93*grid.rowPitch/src.scale)}:null;
   if(slots.length){
     phase='counts';onProgress?.({phase:'read',text:'Reading counts…'});
-    const parse=(row,i)=>({...parseRow(row),text:(row.left+' · '+row.right).trim(),bandId:slots[i].band.id});
+    const parse=(row,i)=>({...parseRow(row),text:(row.left+' · '+row.right).trim(),bandId:slots[i].band.id,conf:row.conf});
     const rows=(await readRows(worker,src,slotRows(slots,src.unit,anchors,grid))).map(parse);
     // A crop that lands a pixel or two off clips the digits enough to lose them, and the height that
     // reads one slot cleanly is not the one that reads its neighbour - sweeping the height moved single
@@ -371,8 +497,79 @@ export async function scanImage(file,bands,{onProgress}={}){
     const units=inferUnits(rows,readJson(UNIT_KEY));writeJson(UNIT_KEY,units);
     const fixed=Object.fromEntries(bands.map(b=>[b.id,usualUnit(b.name)]));
     const shared=commonUnit(rows.filter(r=>!fixed[r.bandId]));
-    items=rows.map((row,i)=>{const own=fixed[row.bandId]||units[row.bandId],{qty,sure}=resolveCount(row,own||shared,!own),line=slots[i];return {text:line.text,bandId:line.band.id,name:line.band.name,qty,sure,raw:row.text,x:Math.round(line.x0/src.scale),y:Math.round(line.y0/src.scale)};});
+    items=rows.map((row,i)=>{
+      const own=fixed[row.bandId]||units[row.bandId],{qty,sure}=resolveCount(row,own||shared,!own),line=slots[i];
+      const x=Math.round(line.x0/src.scale),y=Math.round(line.y0/src.scale);
+      return {text:line.text,bandId:line.band.id,name:line.band.name,qty,sure,raw:row.text,x,y,box:boxAt(x,y)||gridBox(line),confidence:confidence(qty,sure,row.conf)};
+    });
   }
-  return {items,others,ms:Math.round(performance.now()-started)};
+  return {items,others,othersAt,width:src.bitmap.width,height:src.bitmap.height,ms:Math.round(performance.now()-started)};
   }finally{src.canvas.width=src.canvas.height=0;src.bitmap?.close?.();}
+}
+function imagePixels(bitmap){
+  const canvas=document.createElement('canvas');canvas.width=bitmap.width;canvas.height=bitmap.height;
+  const ctx=canvas.getContext('2d',{willReadFrequently:true});ctx.drawImage(bitmap,0,0);
+  const pixels=ctx.getImageData(0,0,canvas.width,canvas.height);canvas.width=canvas.height=0;
+  return pixels;
+}
+// What the viewer shows as "98% match": the reader's own confidence, held down when the count and the
+// weight did not agree, and nothing at all for a slot that could not be read.
+const confidence=(qty,sure,conf)=>qty===null?0:+Math.min(sure?.99:.6,Math.max(.3,conf||0)).toFixed(2);
+// The inventory style with no names and no weights. Each slot is told apart by the colour of its paper
+// band, and counted by the boxed number in its corner: no box means one item.
+async function readPictures(worker,src,pixels,boxes,bands,othersAt){
+  const slots=[];
+  for(const box of boxes){
+    const band=stripeBand(stripeColor(pixels,box),bands);
+    if(band)slots.push({box,band,badge:findBadge(pixels,box)});
+    else othersAt.push({text:'',box});
+  }
+  const counted=slots.filter(s=>s.badge);
+  if(counted.length){
+    // Read at two sizes: a count both agree on is vouched for, one they split on gets double-checked.
+    const badges=counted.map(s=>s.badge),[a,b]=[await readBadges(worker,src.bitmap,badges,42),await readBadges(worker,src.bitmap,badges,52)];
+    counted.forEach((s,i)=>{
+      const first=a[i].map(w=>w.text).join(' '),second=b[i].map(w=>w.text).join(' '),n1=badgeNumber(first),n2=badgeNumber(second);
+      s.raw=first===second?first:first+' / '+second;s.conf=Math.min(meanConf(a[i]),meanConf(b[i])||meanConf(a[i]));
+      s.n=n1??n2;s.agreed=n1!==null&&n1===n2;
+    });
+  }
+  return slots.map(s=>{
+    const qty=s.badge?s.n:1,sure=s.badge?s.agreed:true;
+    return {text:'',bandId:s.band.id,name:s.band.name,qty,sure,raw:s.badge?s.raw:'',x:s.box.x,y:s.box.y,box:s.box,confidence:confidence(qty,sure,s.badge?s.conf:.95)};
+  });
+}
+// Badge digits are a few pixels tall and often a single character, which the reader throws away as
+// noise when it meets one alone on a line. Laid side by side on one line, blown up, they read as words.
+// The font is so small that a 9 and an 8 are one pixel apart, and a contrast stretch fills that pixel
+// in, so each badge is cut hard at halfway between its background and its digits instead.
+async function readBadges(worker,bitmap,badges,size){
+  const tall=badges.map(b=>b.y1-b.y0).sort((a,b)=>a-b)[badges.length>>1],zoom=Math.max(1,Math.min(12,size/tall)),pad=2;
+  const gap=Math.round(tall*zoom*1.5);
+  const canvas=document.createElement('canvas');
+  let x=gap;const at=badges.map(b=>{const a={x,w:Math.round((b.x1-b.x0+2*pad)*zoom),h:Math.round((b.y1-b.y0+2*pad)*zoom)};x+=a.w+gap;return a;});
+  canvas.width=x;canvas.height=Math.max(...at.map(a=>a.h))+2*gap;
+  const ctx=canvas.getContext('2d',{willReadFrequently:true});ctx.fillStyle='#fff';ctx.fillRect(0,0,canvas.width,canvas.height);ctx.imageSmoothingQuality='high';
+  badges.forEach((b,i)=>{
+    const {x,w,h}=at[i];
+    ctx.drawImage(bitmap,b.x0-pad,b.y0-pad,b.x1-b.x0+2*pad,b.y1-b.y0+2*pad,x,gap,w,h);
+    const image=ctx.getImageData(x,gap,w,h),d=image.data,grey=new Uint8Array(d.length/4);
+    for(let i=0;i<d.length;i+=4)grey[i>>2]=(d[i]*299+d[i+1]*587+d[i+2]*114)/1000;
+    const sorted=[...grey].sort((p,q)=>p-q),cut=(sorted[sorted.length>>1]+sorted[Math.floor(sorted.length*.98)])/2;
+    for(let i=0;i<d.length;i+=4)d[i]=d[i+1]=d[i+2]=grey[i>>2]>cut?0:255;
+    ctx.putImageData(image,x,gap);
+  });
+  await worker.setParameters({tessedit_pageseg_mode:PSM.SINGLE_LINE,tessedit_char_whitelist:''});
+  const {data}=await worker.recognize(await toBlob(canvas),{},{blocks:true});
+  globalThis.__scanDebug?.push(canvas.toDataURL());
+  canvas.width=canvas.height=0;
+  const words=(data.blocks||[]).flatMap(b=>b.paragraphs.flatMap(p=>p.lines.flatMap(l=>l.words))).map(w=>({text:w.text,x:(w.bbox.x0+w.bbox.x1)/2,conf:w.confidence}));
+  return at.map(a=>words.filter(w=>w.x>=a.x-gap/2&&w.x<a.x+a.w+gap/2));
+}
+// A badge holds nothing but digits. A count of one is never boxed, so "1" means the reader lost a digit.
+export function badgeNumber(text){
+  const t=String(text).toLowerCase().replace(/[s$§]/g,'5').replace(/[od]/g,'0').replace(/[li|]/g,'1').replace(/b/g,'8').replace(/[\s,.]/g,'');
+  const m=t.match(/^[^\d]?(\d{1,4})[^\d]?$/);
+  const n=m?Number(m[1]):null;
+  return n!==null&&n>=2&&n<=9999?n:null;
 }

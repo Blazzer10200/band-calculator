@@ -14,26 +14,13 @@
     "test:finance": "node --test finance.test.js presence.test.js",
     "test:access": "node --test access.test.js membership.test.js dev-api.test.js security.test.js",
     "test:api": "node --test api.test.js",
-    "verify:build": "npm run check && npm run build && npm run build:pages && node verify-release.mjs dist/pages",
-    "check": "node --check calc-model.js && node --check api.mjs && node --check calculator-ui.js && node --check history-ui.js && node --check admin-ui.js && node --check client-files.mjs && node --check scripts/sample-server.mjs && node --check hub-model.js &&node --check draft-store.js && node --check ui-utils.js && node --check select-ui.js && node --check audit-details.js && node --check release-ui.js && node --check build-client.mjs && node --check finance-model.js && node --check finance-api.js && node --check quick-math.js && node --check panel-layout.js && node --check band-scan.js && node --check change-versions.js && node --check member-profile.js && node --check profile-ui.js && node --check app.js && node --check model.js && node --check player-picker.js && node --check cloud.js && node --check worker.js && node --check cloud-api.mjs && node --check owner-password-reset.mjs && node --check presence.js && node --check api-config.js && node --check auth-ui.js && node --check ui-shell.js && node --check access-model.js && node --check dev-api.mjs && node --check server.mjs && node --check security-ui.js && node --check security-store.mjs && node --check security-crypto.mjs && node --check local-security.mjs && node --check backup-restore.mjs && node --check restore-backup.mjs && node --check cloudflare-edge.mjs && node --check cloudflare-worker.mjs",
-    "build": "node build.mjs",
+    "verify:build": "npm run check && npm run build:pages && node verify-release.mjs dist/pages",
+    "check": "node --check calc-model.js && node --check api.mjs && node --check calculator-ui.js && node --check history-ui.js && node --check admin-ui.js && node --check client-files.mjs && node --check scripts/sample-server.mjs && node --check hub-model.js &&node --check draft-store.js && node --check ui-utils.js && node --check select-ui.js && node --check audit-details.js && node --check release-ui.js && node --check build-client.mjs && node --check finance-model.js && node --check finance-api.js && node --check quick-math.js && node --check panel-layout.js && node --check band-scan.js && node --check scan-viewer.js &&node --check change-versions.js && node --check member-profile.js && node --check profile-ui.js && node --check app.js && node --check model.js && node --check player-picker.js && node --check presence.js && node --check api-config.js && node --check auth-ui.js && node --check ui-shell.js && node --check access-model.js && node --check dev-api.mjs && node --check server.mjs && node --check security-ui.js && node --check security-store.mjs && node --check security-crypto.mjs && node --check local-security.mjs && node --check backup-restore.mjs && node --check restore-backup.mjs && node --check cloudflare-edge.mjs && node --check cloudflare-worker.mjs",
     "build:pages": "node build-pages.mjs",
-    "db:generate": "drizzle-kit generate",
     "cf:dev": "wrangler dev --port 8787 --ip 127.0.0.1",
     "cf:deploy": "wrangler deploy"
   },
-  "devDependencies": {
-    "@openai/sites-vite-plugin": "^0.2.0",
-    "drizzle-kit": "^0.31.10",
-    "drizzle-orm": "^0.45.2",
-    "vite": "^8.2.2"
-  },
   "dependencies": {
     "qrcode": "1.5.4"
-  },
-  "overrides": {
-    "@esbuild-kit/core-utils": {
-      "esbuild": "0.25.12"
-    }
   }
 }

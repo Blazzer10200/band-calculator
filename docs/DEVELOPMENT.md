@@ -10,9 +10,9 @@ Use Node.js 24+. Commands run from the repository root. No dependency install, d
 | `npm run dev:sample` | Reuses/starts the sample server; data exists only in memory |
 | `npm run dev:sample:status` | Reports the sample server's status |
 | `npm run test:api` | The calculator backend (`api.mjs`): guests, sign-up, prices, counts, cash-outs, legacy import, restore |
-| `npm run test:finance` | Legacy finance tests (production `cloud-api.mjs` still uses these modules) |
+| `npm run test:finance` | Legacy finance tests (old modules kept for the one-time `import_v1`) |
 | `npm run test:access` | Legacy access, membership, and authentication tests |
-| `npm run verify:build` | Checks syntax, builds Worker and Pages, verifies browser modules |
+| `npm run verify:build` | Checks syntax, builds Pages, verifies browser modules |
 
 The original `npm run dev` remains available for a foreground server. Normal agent work uses `dev:start`. Logs and launch records live in `.local/dev-PORT.*`. An existing manually started server can be reused, but the launcher refuses to kill it. The launcher's restart guard checks creation time as well as PID to protect against PID reuse.
 
@@ -22,7 +22,7 @@ Append these routes to the intended origin; never switch between origins without
 
 | Page | Hash | Who | Stable controls |
 | --- | --- | --- | --- |
-| Calculator | `#/` | Everyone | `[data-page="calculator"]`, `[data-finance-quantity]`, `[data-calc-hero]`, `[data-calc-save]`, `[data-cashout]`, `[data-undo-cashout]`, `[data-remove]`, `[data-arrange]`, `[data-grip]`, `[data-scan-forget]`, guest `[data-action="register"]` / `[data-action="login"]` |
+| Calculator | `#/` | Everyone | `[data-page="calculator"]`, `[data-finance-quantity]`, `[data-calc-hero]`, `[data-calc-save]`, `[data-cashout]`, `[data-undo-cashout]`, `[data-remove]`, `[data-arrange]`, `[data-grip]`, `[data-scan-forget]`, `[data-scan-input]`, `[data-shot-open]`, scan viewer `.sv` (`[data-sv-fill]`, `[data-sv-step]`, `[data-sv-row]`, `[data-sv-close]`), guest `[data-action="register"]` / `[data-action="login"]` |
 | History | `#/history` | Signed in | `[data-history-range]`, `[data-history-band]`, `[data-history-query]`, `[data-history-csv]` |
 | Admin | `#/admin` | Owner | `[data-admin-tab]` (prices, accounts, activity, backups), `#prices-form`, `[data-band-row]`, `[data-toggle-user]` |
 

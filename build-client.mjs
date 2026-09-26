@@ -1,11 +1,12 @@
-import {mkdir,readFile,writeFile,copyFile} from 'node:fs/promises';
+import {mkdir,readFile,writeFile,rm} from 'node:fs/promises';
 import {createHash} from 'node:crypto';
 import {clientFiles} from './client-files.mjs';
 // Every import gets the same content-derived release fingerprint, including cycles.
 // apiOrigin: accounts server on another origin; allowed in the CSP and announced to api-config.js. standalone: no server at all.
 export async function buildClient(directory,{standalone=false,apiOrigin=''}={}){
   if(apiOrigin&&!/^https?:\/\/[a-z0-9.-]+(:\d+)?$/.test(apiOrigin))throw Error('apiOrigin must be a bare origin like https://example.workers.dev');
-  await mkdir(directory,{recursive:true});
+  // Start empty so the output is exactly one release, the same as a fresh CI checkout.
+  await rm(directory,{recursive:true,force:true});await mkdir(directory,{recursive:true});
   const contents=new Map(await Promise.all(clientFiles.map(async f=>{const bytes=await readFile(f);return [f,/\.(js|css|html)$/.test(f)?Buffer.from(bytes.toString().replace(/\r\n/g,'\n')):bytes];})));
   const hash=createHash('sha256');for(const [f,bytes]of contents)hash.update(f).update(bytes);
   const version=hash.digest('hex').slice(0,12),mapping=Object.fromEntries(clientFiles.map(f=>[f,/\.(js|css)$/.test(f)?f.replace(/\.([^.]+)$/,'.'+version+'.$1'):f]));

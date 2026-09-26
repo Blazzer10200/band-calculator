@@ -1,17 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {randomBytes,createHash,scryptSync} from 'node:crypto';
-import {DatabaseSync} from 'node:sqlite';
-import {readFileSync,readdirSync} from 'node:fs';
 import {createDevApi} from './dev-api.mjs';
-import {stateFromSnapshot,handleCloudApi} from './cloud-api.mjs';
 import {freshData,validateBackup} from './model.js';
 import {restoreSnapshot} from './backup-restore.mjs';
 import {identityInputs} from './profile-ui.js';
 
 const password='Profile-test-password-98765',salt='ab'.repeat(16),passwordHash=salt+':'+scryptSync(password,salt,64,{N:32768,r:8,p:3,maxmem:64*1024*1024}).toString('hex');
 const digest=value=>createHash('sha256').update(value).digest('hex');
-function fixture(t,hosted){
+function fixture(t){
   const data=freshData();data.members=[{id:'legacy',name:'Old Character',callsign:'OLD-01',rank:'Leader',status:'inactive',joined:'2025-04-05',notes:'Keep these notes.'}];
   const api=createDevApi({seed:data}),tokens={};
   const config=JSON.parse(api.db.prepare('SELECT document FROM config').get().document);
@@ -21,17 +18,8 @@ function fixture(t,hosted){
     api.db.prepare("INSERT INTO users(id,name,email,username,password,owner,roles,approval) VALUES(?,?,?,?,?,?,?,'approved')").run(id,id,id+'@pto.invalid',id,passwordHash,owner,JSON.stringify(roles));
     tokens[id]=randomBytes(32).toString('base64url');api.db.prepare('INSERT INTO sessions(hash,user_id,expires,mfa_verified) VALUES(?,?,?,0)').run(digest(tokens[id]),id,Date.now()+3600000);
   }
-  let handle=req=>api.handle(req),origin='http://127.0.0.1:4173',snapshot=()=>api.snapshot();
-  if(hosted){
-    const document=api.snapshot(),key=Buffer.from(document.key,'base64'),state=stateFromSnapshot(document,key);
-    state.sessions=api.db.prepare('SELECT * FROM sessions').all();api.close();
-    const sql=new DatabaseSync(':memory:');t.after(()=>sql.close());
-    for(const file of readdirSync(new URL('./drizzle/',import.meta.url)).filter(f=>f.endsWith('.sql')).sort())sql.exec(readFileSync(new URL('./drizzle/'+file,import.meta.url),'utf8'));
-    sql.prepare('INSERT INTO pto_state(id,revision,document,write_id,updated_at) VALUES(1,0,?,?,?)').run(JSON.stringify(state),'fixture',new Date().toISOString());
-    const DB={prepare(text){let args=[];return {bind(...values){args=values;return this;},async first(){return sql.prepare(text).get(...args)||null;},async all(){return {results:sql.prepare(text).all(...args)};},execute(){return {meta:{changes:Number(sql.prepare(text).run(...args).changes)}};},async run(){return this.execute();}};},async batch(statements){sql.exec('BEGIN');try{const results=statements.map(s=>s.execute());sql.exec('COMMIT');return results;}catch(e){sql.exec('ROLLBACK');throw e;}}};
-    origin='https://pto.test';handle=req=>handleCloudApi(req,{DB,PTO_SECURITY_KEY:document.key});
-    snapshot=()=>{const s=JSON.parse(sql.prepare('SELECT document FROM pto_state WHERE id=1').get().document);return {...document,tables:{...document.tables,users:s.users,workspace:[s.workspace]}};};
-  }else t.after(()=>api.close());
+  const handle=req=>api.handle(req),origin='http://127.0.0.1:4173',snapshot=()=>api.snapshot();
+  t.after(()=>api.close());
   const call=async(path,{body,method=body?'POST':'GET',as='admin'}={})=>{
     const token=tokens[as]||as;
     const req=new Request(origin+path,{method,headers:{Origin:origin,...(body?{'Content-Type':'application/json','X-Bandbook-Request':'1'}:{}),...(token?{Cookie:'pto_session='+token}:{})},...(body?{body:JSON.stringify(body)}:{})});
@@ -39,8 +27,8 @@ function fixture(t,hosted){
   };
   return {call,snapshot};
 }
-for(const hosted of [false,true])test(`${hosted?'D1':'SQLite'} membership contract: approval, identity sync, linking, permissions and stale edits`,async t=>{
-  const {call,snapshot}=fixture(t,hosted);
+test(`membership contract: approval, identity sync, linking, permissions and stale edits`,async t=>{
+  const {call,snapshot}=fixture(t);
   const fields={name:'New Character',username:'new.member',stateId:'01234',phone:'555-1234',password};
   for(const patch of [{stateId:'1234'},{stateId:12345},{stateId:'123456'},{phone:''}])assert.equal((await call('/api/auth/register',{body:{...fields,...patch},as:''})).status,400);
   const registered=await call('/api/auth/register',{body:fields,as:''});assert.equal(registered.status,200);const user=registered.payload.user;
@@ -98,8 +86,8 @@ for(const hosted of [false,true])test(`${hosted?'D1':'SQLite'} membership contra
   assert.equal(JSON.parse(restored.snapshot().tables.workspace[0].document).members.find(m=>m.userId===user.id).name,'Roster Edit');
 });
 
-for(const hosted of [false,true])test(`${hosted?'D1':'SQLite'} live change markers follow requests, profiles, roster and audit`,async t=>{
-  const {call}=fixture(t,hosted),versions=async()=>(await call('/api/session')).payload.versions;
+test(`live change markers follow requests, profiles, roster and audit`,async t=>{
+  const {call}=fixture(t),versions=async()=>(await call('/api/session')).payload.versions;
   const initial=await versions();assert.deepEqual(await versions(),initial);
   const joined=await call('/api/auth/register',{as:'',body:{name:'Live Member',username:'live.member',stateId:'00007',phone:'555-0007',password}});
   const pending=await versions();assert.notEqual(pending.requests,initial.requests);assert.notEqual(pending.accounts,initial.accounts);assert.ok(pending.audit>initial.audit);assert.equal(pending.workspace,initial.workspace);

@@ -10,7 +10,9 @@ A free account adds a running total, cash-outs, History, and (for the Owner) an 
 
 **Count bands.** Step each band up or type the number; the total updates as you go.
 
-**Scan a screenshot.** Snip your inventory (Win+Shift+S), then paste or drop the image. It's read on your own device with a vendored copy of Tesseract (Apache-2.0); nothing is uploaded. Each slot's `xN` count is checked against its weight (100 g per band, Violet 200 g, Loose change 50 g). A count the weight doesn't agree with is flagged "double-check this one", and a slot it can't read comes back as "?" instead of a guess.
+**Scan a screenshot.** Snip your inventory (Win+Shift+S), then paste or drop the image. It's read on your own device with a vendored copy of Tesseract (Apache-2.0); nothing is uploaded. Each slot's `xN` count is checked against its weight (100 g per band, Violet 200 g, Loose change 50 g). A count the weight doesn't agree with is flagged "double-check this one", and a slot it can't read comes back as "?" instead of a guess. The picture-only view (no names or weights, just the stacks with a small boxed count in the corner) works too: the band is told apart by the colour of its paper strap, and a slot with no box counts as one.
+
+When you add a screenshot, a viewer opens on top of the calculator. It shows your screenshot with a box around every slot it read (green = sure, amber = double-check, red = unreadable). Hover a result to zoom in on its slots, fix any count with − and +, then press **Fill in counts** to add them to the calculator.
 
 **Quick math.** A plain calculator for odd sums. Nothing typed there is saved.
 
@@ -34,7 +36,7 @@ Routes, selectors, and the sample accounts are in [docs/DEVELOPMENT.md](./docs/D
 ```sh
 npm run check          # syntax check every module
 npm test               # full test suite
-npm run verify:build   # check + Worker build + Pages build. Builds only, never publishes.
+npm run verify:build   # check + Pages build. Builds only, never publishes.
 ```
 
 ## Publishing
@@ -52,6 +54,6 @@ npm run cf:deploy    # wrangler deploy; needs `wrangler login`
 
 Worker secrets: `BAND_KEY` (32 random bytes, base64; encrypts 2FA secrets; a private copy is in `.local/`, so never rotate it casually) and `SETUP_CODE` (needed once to create the Owner account; anyone can sign up before that). To move accounts from a local server, run `node scripts/export-accounts.mjs > .local/seed.json`, set it as the `BAND_SEED` secret, deploy, then delete the secret; it only loads into a database with no accounts. On Workers Free each request gets about 10 ms of CPU, so Worker passwords use lighter scrypt settings (`WORKER_HASH`); the stronger local hashes still verify. The Owner's encrypted backup download may exceed that budget.
 
-Deploy the Worker before the site when endpoints change. The older ChatGPT Sites backend (`worker.js`, `cloud-api.mjs`) is retired and unused.
+Deploy the Worker before the site when endpoints change.
 
 Older versions of this project (the PTO roster and treasury app) are described in [RELEASE-NOTES.md](./RELEASE-NOTES.md) and the git history.

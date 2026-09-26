@@ -154,6 +154,7 @@ html{scrollbar-gutter:stable;scrollbar-width:thin;scrollbar-color:#2a2a28 var(--
 .scan-keys{display:flex;align-items:center;gap:5px;font-size:12px;color:var(--mute)}
 .scan-keys kbd{padding:2px 6px;border:1px solid var(--line-strong);border-radius:4px;font:400 11px/1.3 var(--font-num);color:var(--soft)}
 .scan-keys span{margin-left:3px}
+.scan-zone-pick{margin-top:-4px;font-size:11.5px;color:var(--mute)}
 .scan-tools{display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px 16px;margin-top:12px}
 .scan-tools[hidden]{display:none}
 .scan-tools .text-button,.scan-head .text-button{font-size:12px;color:var(--soft)}
@@ -172,8 +173,9 @@ html{scrollbar-gutter:stable;scrollbar-width:thin;scrollbar-color:#2a2a28 var(--
 .scan-shot.is-reading img{opacity:.5}
 .scan-shot img{display:block;width:100%;height:100%;object-fit:cover;transition:opacity var(--t) var(--ease)}
 .scan-shot figcaption{position:absolute;left:5px;bottom:5px;min-width:16px;padding:0 4px;border-radius:4px;background:#0f0f0ed9;font:500 10px/16px var(--font-num);color:var(--ink-2);text-align:center}
-.scan-shot button{position:absolute;top:4px;right:4px;display:grid;place-items:center;width:20px;height:20px;min-height:0;padding:0;border:0;border-radius:50%;background:#0f0f0ed9;font-size:13px;line-height:1;color:var(--ink-2);cursor:pointer}
-.scan-shot button:hover{color:var(--danger)}
+.scan-shot [data-shot-remove]{position:absolute;top:4px;right:4px;display:grid;place-items:center;width:20px;height:20px;min-height:0;padding:0;border:0;border-radius:50%;background:#0f0f0ed9;font-size:13px;line-height:1;color:var(--ink-2);cursor:pointer}
+.scan-shot [data-shot-remove]:hover{color:var(--danger)}
+.scan-shot-open{display:block;width:100%;height:100%;min-height:0;padding:0;border:0;border-radius:0;background:none;cursor:zoom-in}
 .scan-add{aspect-ratio:16/10;min-height:0;padding:0;border:1px dashed var(--line-strong);border-radius:8px;background:none;font:400 12px/1 var(--font-ui);color:var(--soft);cursor:pointer}
 .scan-add:hover{border-color:var(--good);color:var(--good)}
 .scan-result{margin-top:16px}
@@ -193,13 +195,131 @@ html{scrollbar-gutter:stable;scrollbar-width:thin;scrollbar-color:#2a2a28 var(--
 .scan-others{margin-top:16px;padding:14px 16px;border:1px solid var(--line);border-radius:12px}
 .scan-others summary{font-size:12.5px;color:var(--soft);cursor:pointer}
 .scan-others p{margin:10px 0 0;font-size:12px;line-height:1.5;color:var(--mute)}
-.scan-chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}
-.scan-chips button{height:28px;min-height:0;padding:0 11px;border:1px solid var(--line-strong);border-radius:var(--r-pill);background:none;font:400 11.5px/1 var(--font-num);color:var(--soft);cursor:pointer}
-.scan-chips button:hover{border-color:var(--line-hover);color:var(--ink)}
-.scan-chips button.is-picked{border-color:var(--good);color:var(--good)}
-.scan-teach{margin-top:12px}
-.scan-teach label{display:flex;align-items:center;gap:10px;margin:0;font-size:12.5px;color:var(--soft)}
-.scan-teach select{flex:1;height:34px;padding:0 10px;border:1px solid var(--line-strong);border-radius:8px;background:var(--bg-sunken);color:var(--ink);font-size:12.5px}
+.scan-chips,.sv-chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}
+:is(.scan-chips,.sv-chips) button{height:28px;min-height:0;padding:0 11px;border:1px solid var(--line-strong);border-radius:var(--r-pill);background:none;font:400 11.5px/1 var(--font-num);color:var(--soft);white-space:nowrap;cursor:pointer}
+:is(.scan-chips,.sv-chips) button:hover{border-color:var(--line-hover);color:var(--ink)}
+:is(.scan-chips,.sv-chips) button.is-picked{border-color:var(--good);color:var(--good)}
+.scan-teach,.sv-teach{margin-top:12px}
+:is(.scan-teach,.sv-teach) label{display:flex;align-items:center;gap:10px;margin:0;font-size:12.5px;color:var(--soft)}
+:is(.scan-teach,.sv-teach) select{flex:1;height:34px;padding:0 10px;border:1px solid var(--line-strong);border-radius:8px;background:var(--bg-sunken);color:var(--ink);font-size:12.5px}
+
+/* Scan viewer: opens over the calculator when a screenshot is added. The card is laid out at 1180×640 and
+   zoomed to fit (scan-viewer.js); under 1000px it stacks and scrolls instead. */
+html.sv-open{overflow:hidden}
+.sv{position:fixed;inset:0;z-index:70;display:grid;place-items:center;padding:24px}
+.sv-backdrop{position:absolute;inset:0;background:#070707db;backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);animation:fade-in .3s var(--ease)}
+.sv-card{position:relative;display:grid;grid-template-columns:760px minmax(0,1fr);width:1180px;height:640px;overflow:hidden;border:1px solid var(--line-strong);border-radius:18px;background:var(--bg);box-shadow:0 60px 160px -40px #000;animation:sv-card .42s var(--ease) .16s backwards}
+.sv.is-closing .sv-backdrop{animation:sv-out .22s var(--ease) forwards}
+.sv.is-closing .sv-card{animation:sv-card-out .22s var(--ease) forwards}
+@keyframes sv-card{from{opacity:0;transform:scale(.98)}}
+@keyframes sv-out{to{opacity:0}}
+@keyframes sv-card-out{to{opacity:0;transform:translateY(8px) scale(.97)}}
+.sv-left{display:flex;flex-direction:column;min-width:0;padding:20px}
+.sv-meta{display:flex;justify-content:space-between;align-items:center;gap:16px;height:28px;font:400 11.5px/1 var(--font-num);color:var(--soft);white-space:nowrap;animation:fade-in .4s var(--ease) .4s backwards}
+.sv-file{display:flex;align-items:center;gap:8px;min-width:0;overflow:hidden;text-overflow:ellipsis}
+.sv-file i{flex:0 0 6px;height:6px;border-radius:50%;background:var(--good)}
+.sv-stage{position:relative;width:720px;height:480px;margin-top:8px;overflow:hidden;border:1px solid #262624;border-radius:12px;background:#121211}
+.sv-fly{position:absolute;inset:0}
+.sv-layer{position:absolute;transform-origin:0 0;transition:transform .7s var(--ease)}
+.sv-layer.is-instant{transition:none}
+.sv-layer img{display:block;width:100%;height:100%}
+.sv-boxes{position:absolute;inset:0}
+.sv-box{--tone:var(--good);position:absolute;min-height:0;padding:0;border:1.5px solid var(--tone);border-radius:11px;background:none;cursor:pointer;transition:opacity .3s var(--ease),box-shadow .3s var(--ease)}
+.sv.is-final .sv-box{animation:sv-pop .38s var(--ease) backwards;animation-delay:var(--pop)}
+.sv-box.is-amber{--tone:var(--amber);border-style:dashed}
+.sv-box.is-danger{--tone:var(--danger);border-style:dashed}
+.sv-box.is-soft{--tone:var(--soft);border-style:dotted}
+.sv-boxes.has-focus .sv-box:not(.is-focus){opacity:.3}
+.sv-box.is-focus{box-shadow:0 0 0 5px color-mix(in srgb,var(--tone) 18%,transparent)}
+.sv-tag{position:absolute;left:6px;top:-9px;height:17px;padding:0 6px;border-radius:5px;background:var(--tone);font:600 9.5px/17px var(--font-num);color:var(--on-ink);white-space:nowrap;pointer-events:none}
+@keyframes sv-pop{from{opacity:0;transform:scale(1.3)}}
+.sv-grid{position:absolute;inset:0;pointer-events:none;opacity:0;transition:opacity .8s var(--ease);background-image:linear-gradient(#9ad6a90f 1px,transparent 1px),linear-gradient(90deg,#9ad6a90f 1px,transparent 1px);background-size:24px 24px}
+.sv.is-reading .sv-grid{opacity:1}
+.sv-sweep{position:absolute;left:0;right:0;top:-120px;height:120px;pointer-events:none;opacity:0;border-bottom:1.5px solid var(--good);background:linear-gradient(#9ad6a900,#9ad6a91f);box-shadow:0 6px 24px #9ad6a955}
+.sv.is-reading .sv-sweep{animation:sv-sweep 1.5s linear .56s infinite}
+.sv.is-final .sv-sweep{animation:sv-sweep 1.5s linear}
+@keyframes sv-sweep{0%{top:-120px;opacity:1}88%{opacity:1}100%{top:100%;opacity:0}}
+.sv-readout{--tone:var(--good);position:absolute;left:12px;bottom:12px;display:flex;align-items:center;gap:10px;max-width:calc(100% - 90px);padding:10px 14px;border:1px solid var(--line-strong);border-radius:10px;background:#0f0f0eeb;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);animation:fade-up .3s var(--ease)}
+.sv-readout[hidden]{display:none}
+.sv-readout.is-amber{--tone:var(--amber)}
+.sv-readout.is-danger{--tone:var(--danger)}
+.sv-readout.is-soft{--tone:var(--soft)}
+.sv-readout i{flex:0 0 7px;height:7px;border-radius:50%;background:var(--tone)}
+.sv-readout strong{display:block;font:500 13px/1.3 var(--font-ui);color:var(--ink)}
+.sv-readout span{display:block;margin-top:2px;font:400 11.5px/1.3 var(--font-num);color:var(--soft)}
+.sv-fit{position:absolute;right:12px;bottom:12px;height:32px;min-height:0;padding:0 14px;border:1px solid var(--line-strong);border-radius:var(--r-pill);background:#0f0f0eeb;font:500 12px/1 var(--font-ui);color:var(--ink-2);cursor:pointer}
+.sv-fit:hover{border-color:var(--line-hover);color:var(--ink)}
+.sv-fit[hidden]{display:none}
+.sv-hint{margin:12px 0 0;font-size:12px;color:var(--mute);animation:fade-in .4s var(--ease) .4s backwards}
+.sv-right{display:flex;flex-direction:column;min-width:0;min-height:0;padding:26px 28px 24px;border-left:1px solid var(--line);animation:sv-slide .42s var(--ease) .28s backwards}
+@keyframes sv-slide{from{opacity:0;transform:translateX(16px)}}
+.sv-head{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.sv-head h2{margin:0;font:500 15px/1.3 var(--font-ui);letter-spacing:0;color:var(--ink)}
+.sv-close{display:grid;place-items:center;flex:0 0 32px;width:32px;height:32px;min-height:0;padding:0;border:1px solid var(--line-strong);border-radius:50%;background:var(--bg);font-size:16px;line-height:1;color:var(--ink-2);cursor:pointer}
+.sv-close:hover{border-color:var(--line-hover);color:var(--ink)}
+.sv-status{display:flex;align-items:center;gap:8px;margin:14px 0 0;font:400 12px/1.4 var(--font-num);color:var(--soft)}
+.sv-status::before{content:"";flex:0 0 6px;height:6px;border-radius:50%;background:var(--good)}
+.sv-status.is-busy::before{background:var(--amber);animation:status-pulse 1.8s ease-out infinite}
+.sv-status.is-warn{color:var(--danger)}
+.sv-status.is-warn::before{background:var(--danger)}
+.sv-right .eyebrow{margin:26px 0 0}
+.sv-total{display:block;margin-top:6px;font:300 44px/1.05 var(--font-ui);letter-spacing:-.03em;font-variant-numeric:tabular-nums;color:var(--ink)}
+.sv-total.is-reading{color:#4a4a47}
+.sv-total.is-in{animation:sv-unblur .5s var(--ease) 1.5s backwards}
+@keyframes sv-unblur{from{opacity:.4;filter:blur(6px)}}
+.sv-rows{flex:1 1 auto;min-height:0;margin:20px -10px 0;overflow:auto}
+.sv-row{display:grid;grid-template-columns:10px minmax(0,1fr) auto 70px;align-items:center;gap:12px;padding:11px 10px;border-radius:10px;transition:background var(--t) var(--ease)}
+.sv-row.is-focus{background:#1a1a19}
+.sv-rows.is-in .sv-row{animation:fade-up .38s var(--ease) backwards;animation-delay:calc(1.5s + var(--i) * 60ms)}
+.sv-row>i{width:8px;height:8px;border-radius:50%;background:var(--band)}
+.sv-row-name span{display:block;overflow:hidden;font-size:13.5px;color:var(--ink);white-space:nowrap;text-overflow:ellipsis}
+.sv-row-name small{display:block;margin-top:2px;font-size:11.5px;color:var(--mute)}
+.sv-row-name small.is-amber{color:var(--amber)}
+.sv-row-name small.is-danger{color:var(--danger)}
+.sv-step{display:flex;align-items:center;gap:6px}
+.sv-step button{display:grid;place-items:center;width:26px;height:26px;min-height:0;padding:0;border:1px solid var(--line-strong);border-radius:50%;background:none;font:400 14px/1 var(--font-ui);color:var(--ink-2);cursor:pointer;transition:border-color var(--t-fast) var(--ease),color var(--t-fast) var(--ease),transform var(--t-fast) var(--ease)}
+.sv-step button:hover:not(:disabled){border-color:var(--mute);color:var(--ink)}
+.sv-step button:active:not(:disabled){transform:scale(.93)}
+.sv-step button:disabled{border-color:var(--line);color:var(--faint);cursor:default}
+.sv-step output{display:grid;place-items:center;min-width:42px;height:26px;padding:0 6px;border:1px solid var(--line-strong);border-radius:6px;font:400 14px/1 var(--font-num);font-variant-numeric:tabular-nums;color:var(--ink)}
+.sv-step output.is-amber{border-style:dashed;border-color:#e3bd8466;color:var(--amber)}
+.sv-step output.is-danger{border-style:dashed;border-color:#e8a39466;color:var(--danger)}
+.sv-step output.is-up{animation:sv-up .22s var(--ease)}
+.sv-step output.is-down{animation:sv-down .22s var(--ease)}
+@keyframes sv-up{from{opacity:.2;transform:translateY(6px)}}
+@keyframes sv-down{from{opacity:.2;transform:translateY(-6px)}}
+.sv-value{font:400 13px/1 var(--font-num);color:var(--soft);text-align:right}
+.sv-skel{display:grid;grid-template-columns:10px minmax(0,1fr) 110px;align-items:center;gap:12px;padding:15px 10px}
+.sv-skel i{width:8px;height:8px;border-radius:50%}
+.sv-skel span{height:12px}
+.sv-skel .skel{animation-duration:1.1s;animation-delay:calc(var(--i) * 90ms)}
+.sv-empty{margin:8px 10px;font-size:13px;line-height:1.55;color:var(--soft)}
+.sv-others{margin-top:14px;padding-top:14px;border-top:1px solid var(--line)}
+.sv-others[hidden]{display:none}
+.sv-others-title{margin:0;font-size:12.5px;font-weight:500;color:var(--ink-2)}
+.sv-others-hint{margin:4px 0 0;font-size:11.5px;line-height:1.5;color:var(--mute)}
+.sv-others .sv-chips{margin-top:10px}
+.sv-foot{display:flex;gap:10px;margin-top:18px}
+.sv-foot .button{height:44px;padding:0 22px}
+.sv-foot .button:disabled{opacity:.4}
+@media (max-width:999px){
+  .sv{place-items:stretch;padding:12px}
+  .sv-card{grid-template-columns:minmax(0,1fr);width:auto;height:auto;max-height:calc(100dvh - 24px);overflow:auto}
+  /* Opacity-only entry and exit here: a transform on the card would pin the fixed close button to it. */
+  .sv-card{animation-name:fade-in}
+  .sv.is-closing .sv-card{animation-name:sv-out}
+  .sv-left{padding:14px 14px 0}
+  .sv-meta{padding-right:40px}
+  .sv-stage{width:100%;height:auto;aspect-ratio:3/2}
+  .sv-right{padding:18px 18px 0;border-left:0;animation-name:fade-in}
+  .sv-rows{flex:none;overflow:visible}
+  .sv-foot{position:sticky;bottom:0;margin:18px -18px 0;padding:12px 18px calc(12px + env(safe-area-inset-bottom));border-top:1px solid var(--line);background:var(--bg)}
+  .sv-foot .button{flex:1}
+  .sv-total{font-size:36px}
+  /* The results sit below the picture here, so the close button stays in reach up top. */
+  .sv-close{position:fixed;top:22px;right:22px;z-index:2}
+}
+@media (max-width:480px){.sv-meta span:last-child{display:none}}
 
 /* Quick math */
 .calc-math{border-top:1px solid var(--line)!important;border-bottom:1px solid var(--line)!important}

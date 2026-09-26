@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 // The vendored OCR engine looks for a worker global the moment it loads; nothing below ever runs it.
 globalThis.self??=globalThis;
-const {parseRow,resolveCount,inferUnits,commonUnit,usualUnit,matchBand,normalizeName,lattice,gridCells,cellAt}=await import('./band-scan.js');
+const {parseRow,resolveCount,inferUnits,commonUnit,usualUnit,matchBand,normalizeName,lattice,gridCells,cellAt,findBars,slotBoxes,stripeColor,stripeBand,findBadge,badgeNumber}=await import('./band-scan.js');
 
 const BANDS=[
   {id:'band-1',name:'White band',price:10000,active:true},
@@ -11,7 +11,7 @@ const BANDS=[
 ];
 
 test('a count is only ever what follows the x, so a stray number is not a quantity',()=>{
-  assert.deepEqual(parseRow({left:'x5',right:'500 g'}),{n:5,grams:500,bare:false});
+  assert.deepEqual(parseRow({left:'x5',right:'500 g'}),{n:5,grams:500,bare:false,guess:null});
   // Hotbar slots print their key number to the left of the count.
   assert.equal(parseRow({left:'3 x5',right:'500 g'}).n,5);
   // A bare number is the hotbar key or the wreckage of a crop that slipped. Reading one as a quantity
@@ -137,4 +137,61 @@ test('two grid lines that land on the same names give one cell, not two',()=>{
 test('an unusual layout is left alone rather than forced onto a grid',()=>{
   assert.equal(lattice([{x0:0,y0:0},{x0:10,y0:0},{x0:0,y0:10}],20),null);// too few names
   assert.equal(lattice([{x0:0,y0:0},{x0:5,y0:0},{x0:0,y0:5},{x0:5,y0:5}],20),null);// slots too close together
+});
+
+test('a count whose x went missing is offered as a guess, and a weight of 0 g is no weight',()=>{
+  const row=parseRow({left:'2',right:'eoog'});
+  assert.equal(row.grams,null);assert.equal(row.guess,2);
+  assert.deepEqual(resolveCount(row,100),{qty:2,sure:false});
+  // The weight still settles it when it can be read, and a lone "1" is never a stack.
+  assert.deepEqual(resolveCount(parseRow({left:'2',right:'200 g'}),100),{qty:2,sure:true});
+  assert.equal(resolveCount(parseRow({left:'1',right:''}),100).qty,null);
+});
+
+// A tiny inventory in raw pixels: two slots on a dark panel, each closed off by a coloured bar, with
+// grey-green bills in the middle wrapped in a paper band, and the storage weight meter above them.
+function inventory(){
+  const W=260,H=130,data=new Uint8ClampedArray(W*H*4);
+  const fill=(x0,y0,x1,y1,[r,g,b])=>{for(let y=y0;y<y1;y++)for(let x=x0;x<x1;x++){const i=(y*W+x)*4;data[i]=r;data[i+1]=g;data[i+2]=b;data[i+3]=255;}};
+  fill(0,0,W,H,[20,20,20]);
+  fill(10,8,85,10,[178,241,101]);// the weight meter: a bar, but a quarter shorter than a slot's
+  for(const [x,paper] of [[10,[122,97,71]],[130,[145,67,114]]]){// brown, violet
+    fill(x,110,x+100,113,[124,216,255]);
+    fill(x+20,35,x+80,95,[170,182,160]);// the bills
+    fill(x+45,35,x+58,95,paper);// the paper band round them
+  }
+  // A boxed "5" in the violet slot's corner, as a few bright pixels.
+  fill(215,16,220,17,[235,235,235]);fill(215,17,216,20,[235,235,235]);fill(215,20,220,21,[235,235,235]);fill(219,21,220,23,[235,235,235]);fill(215,23,220,24,[235,235,235]);
+  return {width:W,height:H,data};
+}
+
+test('filled slots are found by the bar under them, and the weight meter is not one',()=>{
+  const bars=findBars(inventory());
+  assert.equal(bars.length,2);
+  const boxes=slotBoxes(bars);
+  assert.deepEqual(boxes.map(b=>[b.x,b.w]),[[8,104],[128,104]]);
+  assert.ok(boxes.every(b=>b.y>=0&&b.y<20&&b.y+b.h>=112),'each box runs from the top of the slot down past its bar');
+});
+
+test('a slot is told apart by its paper band, and counted by the box in its corner',()=>{
+  const image=inventory(),boxes=slotBoxes(findBars(image));
+  const bands=[{id:'w',name:'White band'},{id:'br',name:'Brown band'},{id:'p',name:'Purple band'},{id:'v',name:'Violet band'},{id:'lc',name:'Loose change'}];
+  const colours=boxes.map(b=>stripeColor(image,b));
+  assert.ok(colours.every(c=>c.paper>.3),'bills everywhere');
+  assert.deepEqual(colours.map(c=>stripeBand(c,bands)?.id),['br','v']);
+  // White paper has no hue; loose change has no band at all. Something with no bills is not money.
+  assert.equal(stripeBand({hue:null,share:0,white:.03,paper:.15},bands).id,'w');
+  assert.equal(stripeBand({hue:null,share:0,white:0,paper:.15},bands).id,'lc');
+  assert.equal(stripeBand({hue:30,sat:.42,share:.05,white:0,paper:0},bands),null);
+  assert.equal(stripeBand({hue:120,sat:.8,share:.2,white:0,paper:.15},bands),null);// a green band nobody has
+  assert.equal(findBadge(image,boxes[0]),null);// no box: one item
+  assert.deepEqual(findBadge(image,boxes[1]),{x0:215,y0:16,x1:220,y1:24});
+});
+
+test('a badge holds only digits, and a lone 1 is a digit lost, not a count',()=>{
+  assert.equal(badgeNumber('10'),10);
+  assert.equal(badgeNumber('§'),5);
+  assert.equal(badgeNumber('1O'),10);
+  assert.equal(badgeNumber('1'),null);
+  assert.equal(badgeNumber(''),null);
 });

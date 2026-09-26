@@ -24,7 +24,7 @@ Keep work focused on the user's current request. This file maps the project; it 
 | Backend (local, sample and Cloudflare Worker) | api.mjs; cloudflare-worker.mjs + cloudflare-edge.mjs |
 | Look and feel ("Ledger") | tokens.css (colors, type, radii), then styles, polish, experience (motion), auth, security, calculator, app |
 | Browser asset/build boundary | client-files.mjs, build-client.mjs |
-| Legacy (old tests and the retired Sites API only) | dev-api.mjs, cloud-api.mjs, finance-*.js, model.js, access-model.js, profile-ui.js |
+| Legacy (old tests and the one-time `import_v1` only) | dev-api.mjs, finance-*.js, model.js, access-model.js, profile-ui.js |
 
 Search anchored symbols with `rg -n`; avoid dumping minified CSS or whole large modules. Inspect both API adapters when changing endpoint behavior. Shared business logic belongs in the shared modules.
 

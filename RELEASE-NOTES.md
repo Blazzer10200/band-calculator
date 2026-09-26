@@ -1,5 +1,36 @@
 # Workspace release — September 2026
 
+## September 25 (evening) — Scan viewer, picture-only inventories (released)
+
+- **A viewer opens when you add a screenshot.** Your screenshot sits on the left with a box around every
+  slot the scanner read: green when it is sure, dashed amber for "double-check this one", red when it
+  could not read the count. The right side lists each band with its total. Hover a band to zoom in on its
+  slots, change a count with − and +, then press **Fill in counts** to add them to the calculator. Click a
+  screenshot's thumbnail to open it again. A screenshot is only ever added once.
+- **Picture-only inventories are read.** Some inventory views show just the stacks (no names, no weights)
+  with a small boxed count in the top-right corner, and no box when there is one. The scanner now finds
+  each slot by the coloured bar under it, tells the band apart by the colour of its paper strap and reads
+  the boxed number twice. It only counts as sure if both reads agree.
+- Fewer "?" results: when a slot shows a bare number with no ×, the scanner uses it but marks it
+  "double-check this one" instead of giving up.
+- The drop area now says you can also click to choose a file.
+- The page's security policy now allows images the browser makes from your own file (`blob:`), so the
+  viewer can show your screenshot. Nothing else changed in it.
+- The retired ChatGPT Sites backend and its build files were removed from the project. Every build now
+  starts from an empty folder, and the release check fails if anything that is not part of the release
+  is in it.
+
+### Checks
+
+- Scanner bench, 8 hand-counted screenshots (2 of them picture-only): 662 bands, every one right.
+- `npm test` (96), `npm run check`, `npm run verify:build`, `git diff --check`: pass.
+- Viewer on the real bench screenshots at 1280 px and 375 px: boxes line up with the slots, hover zoom,
+  stepping (+/−) and Esc all work, and there is no sideways scroll on a phone.
+- Sample server (guest): add a screenshot → viewer → Fill in counts → tiles and total update, toast shown;
+  reopening the thumbnail shows "Added to this count" and adds nothing more. No console errors.
+- The built Pages site under its production security policy: screenshot shows in the viewer, boxes sit on
+  the slots, Fill in counts works, no console errors.
+
 ## September 25 — New look ("Ledger")
 
 Every screen was restyled: a flat, quiet near-black page with hairline dividers, one big light total and
