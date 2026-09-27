@@ -35,15 +35,28 @@ export async function mountCalculator(root,session,{request,onSaved,onClean,canR
     if(root.busy)return;root.busy=true;writes++;root.querySelectorAll('button,input,textarea,select').forEach(el=>el.disabled=true);message='';undoRemove=null;
     const before=heroView().total;
     try{state=await request(path,{method:'POST',body});seen();confirm=null;
-      if(kind==='saved'){clearDraft(draftKey);draft=blank();noteOpen=false;savedFlash=true;shots=[];}
+      const left=kind==='saved'?unsaved(body):null;
+      if(left){draft={...draft,quantities:left.quantities,requestId:crypto.randomUUID()};saveDraft(draftKey,draft);message=left.message;}
+      else if(kind==='saved'){clearDraft(draftKey);draft=blank();noteOpen=false;savedFlash=true;shots=[];}
       if(kind==='removed'){undoRemove=path.split('/')[3];message='Count removed.';}
-      onClean();await onSaved(kind);render();
+      onClean();if(!left)await onSaved(kind);render();
       if(kind==='cashed'){const hero=root.querySelector('[data-calc-hero]'),total=hero?.querySelector('.calc-total');hero?.classList.add('is-cashed');if(total)animateMoney(total,before,heroView().total);}
       if(savedFlash){savedFlash=false;root.querySelector('[data-calc-hero]')?.classList.add('is-saved');root.querySelector('.calc-row')?.classList.add('is-new');const status=root.querySelector('[data-draft-status]');if(status){status.textContent='Count saved. Your totals are updated.';status.classList.add('is-saved');}}
     }catch(e){
       if(e.payload?.pricesChanged){const {error:_,pricesChanged:__,...fresh}=e.payload;state=fresh;seen();message=e.message;render();}
       else error(e);
     }finally{root.busy=false;root.querySelectorAll('button,input,textarea,select').forEach(el=>el.disabled=false);root.querySelectorAll('[data-finance-quantity]').forEach(i=>i.disabled=!state.bands.find(b=>b.id===i.dataset.financeQuantity)?.price);syncQuantityButtons();const total=draftTotal();root.querySelectorAll('[data-calc-save]').forEach(b=>b.disabled=!total);root.querySelectorAll('[data-discard]').forEach(b=>b.disabled=!hasDraft());renderScan?.();}
+  }
+  // A save keeps its id until it is known to have landed, so trying again never saves a count twice. The
+  // server answers an id it already has with the count it has: an earlier try that went through while
+  // its answer was lost. Anything added to the count after that try is not in it and stays here.
+  function unsaved(body){
+    const kept=state.counts.find(c=>c.id===body.requestId),had=new Map((kept?.lines||[]).map(l=>[l.id,l.quantity])),quantities={};
+    if(!kept)return {quantities:draft.quantities,message:'That count could not be saved. Save it again.'};
+    for(const l of body.lines)if(l.quantity>(had.get(l.id)||0))quantities[l.id]=l.quantity-(had.get(l.id)||0);
+    const lower=[...had].some(([id,q])=>(body.lines.find(l=>l.id===id)?.quantity||0)<q),more=Object.keys(quantities).length>0;
+    if(!more&&!lower)return null;
+    return {quantities,message:'This count was already saved: the connection dropped before the answer came back.'+(more?' What you added after that is still here. Save it to add it too.':'')+(lower?' It was saved with the numbers from before you lowered them; remove it in History and count again if that is wrong.':'')};
   }
   const entryDay=e=>dayOf(Date.parse(e.at));
   const sumOf=rows=>rows.reduce((n,e)=>n+e.total,0);
@@ -256,9 +269,14 @@ export async function mountCalculator(root,session,{request,onSaved,onClean,canR
       return {form,filled,unread,unpriced};
     };
     const list=names=>names.length<2?names.join(''):names.slice(0,-1).join(', ')+' and '+names.at(-1);
+    // A screenshot read again after it was added (a band name was taught) adds only what it did not add
+    // the first time, so the new band goes in and nothing is counted twice.
     const fillShots=(targets,linesFor)=>{
-      const lines=targets.flatMap(linesFor),done=addCounts(lines);if(!done)return;
-      for(const s of targets)s.added=true;
+      const perShot=targets.map(s=>[s,linesFor(s).map(l=>({...l,qty:l.qty===null?null:Math.max(0,l.qty-(s.addedQty?.[l.bandId]||0))}))]);
+      const addable=id=>{const input=root.querySelector('#finance-deposit-form [data-finance-quantity="'+CSS.escape(id)+'"]');return !!input&&!input.disabled;};
+      const took=perShot.map(([s,lines])=>[s,lines.filter(l=>l.qty&&addable(l.bandId))]);
+      const done=addCounts(perShot.flatMap(([,lines])=>lines));if(!done)return;
+      for(const [s,lines] of took){s.added=true;s.addedQty??={};for(const l of lines)s.addedQty[l.bandId]=(s.addedQty[l.bandId]||0)+l.qty;}
       const {form,filled,unread,unpriced}=done;
       const missed=[...(unread.length?[list(unread)+(unread.length===1?' was':' were')+' not readable, add '+(unread.length===1?'it':'them')+' by hand.']:[]),...(unpriced.length?['Skipped '+list(unpriced)+': no price set.']:[])].join(' ');
       toast(!filled?(missed||'Nothing to add from this screenshot.'):missed?'Counts added. '+missed:'Counts added from your screenshot'+(targets.length>1?'s':'')+'. Check them'+(signedIn?', then save.':'.'));
@@ -276,7 +294,7 @@ export async function mountCalculator(root,session,{request,onSaved,onClean,canR
         result.querySelectorAll('[data-scan-other]').forEach(x=>x.classList.toggle('is-picked',x===b));
         teach.hidden=false;teach.innerHTML='<label><span>“'+esc(text)+'” is</span><select data-scan-alias><option value="">Pick a band…</option>'+state.bands.map(x=>'<option value="'+esc(x.id)+'">'+esc(x.name)+'</option>').join('')+'</select></label>';
         const select=teach.querySelector('select');select.focus();
-        select.addEventListener('change',()=>{if(!select.value)return;saveAlias(text,select.value);for(const s of shots)if(s.scan?.others?.some(o=>o.toLowerCase()===text.toLowerCase()))s.scan=undefined;queueScan();});
+        select.addEventListener('change',()=>{if(!select.value)return;teachName(text,select.value);});
       }));
     };
     const renderShots=(fresh)=>{
@@ -291,6 +309,13 @@ export async function mountCalculator(root,session,{request,onSaved,onClean,canR
       result.innerHTML=resultHtml();result.hidden=!result.innerHTML;bindResults();
     };
     renderScan=renderShots;
+    // Every screenshot that showed the taught name is read again. One already added can then be filled
+    // once more, for what the new read found on top (fillShots keeps what it added before).
+    const teachName=(text,bandId)=>{
+      saveAlias(text,bandId);
+      for(const s of shots)if(s.scan?.others?.some(o=>o.toLowerCase()===text.toLowerCase())){s.scan=undefined;s.added=false;}
+      queueScan();
+    };
     // One screenshot at a time through the reader; results land as each finishes.
     const queueScan=()=>{
       for(const s of shots)if(!s.scan)s.scan={busy:true};
@@ -314,13 +339,14 @@ export async function mountCalculator(root,session,{request,onSaved,onClean,canR
     // The viewer opens on the newest screenshot and follows its read; the side panel keeps the rest.
     const view=(shot,from)=>{
       viewer?.close();
+      const leave=()=>open.close();
       const open=openScanViewer({shot,bands:state.bands,from,reduceMotion,
         onFill:lines=>{if(!shot.added)fillShots([shot],()=>lines);},
         onAgain:()=>root.querySelector('[data-scan-input]')?.click(),
-        onAlias:(text,bandId)=>{saveAlias(text,bandId);for(const s of shots)if(s.scan?.others?.some(o=>o.toLowerCase()===text.toLowerCase()))s.scan=undefined;queueScan();open.update();},
-        onClose:()=>{if(viewer===open)viewer=null;}});
+        onAlias:(text,bandId)=>{teachName(text,bandId);open.update();},
+        onClose:()=>{removeEventListener('hashchange',leave);if(viewer===open)viewer=null;}});
       viewer=open;
-      addEventListener('hashchange',()=>open.close(),{once:true});
+      addEventListener('hashchange',leave,{once:true});
     };
     const load=files=>{
       let newest=null;
@@ -356,7 +382,7 @@ export async function mountCalculator(root,session,{request,onSaved,onClean,canR
         load(files);
       }catch(e){say(e.name==='NotAllowedError'?'Clipboard access was blocked. Allow it in the address bar, or press Ctrl+V on the page instead.':e.message);}
     });
-    root.querySelector('[data-scan-forget]')?.addEventListener('click',()=>{forgetLearned();message='The scanner forgot the band names and stack sizes it had picked up. The next screenshot starts fresh.';render();});
+    root.querySelector('[data-scan-forget]')?.addEventListener('click',()=>{forgetLearned();message='The scanner forgot the band names it was taught. The next screenshot starts fresh.';render();});
     if(root.pasteHandler)document.removeEventListener('paste',root.pasteHandler);
     root.pasteHandler=e=>{if(!root.isConnected){document.removeEventListener('paste',root.pasteHandler);return;}const files=[...(e.clipboardData?.items||[])].filter(i=>i.type.startsWith('image/')).map(i=>i.getAsFile()).filter(Boolean);if(files.length){e.preventDefault();load(files);panel.scrollIntoView({block:'nearest',behavior:reduceMotion?'auto':'smooth'});}};
     document.addEventListener('paste',root.pasteHandler);
@@ -385,7 +411,8 @@ export async function mountCalculator(root,session,{request,onSaved,onClean,canR
     if(form)bindQuantityFields(form);
     form?.addEventListener('input',()=>{draft.quantities=Object.fromEntries([...form.querySelectorAll('[data-finance-quantity]')].map(i=>[i.dataset.financeQuantity,i.value]));draft.notes=form.querySelector('#finance-note')?.value||'';draftStored=saveDraft(draftKey,draft);const status=root.querySelector('[data-draft-status]');status.classList.remove('is-saved');status.textContent=!draftStored?'This count lives in this tab only; device storage is unavailable.':draftNote();refreshTotals();onClean();});
     form?.addEventListener('submit',e=>{e.preventDefault();if(!signedIn){form.querySelector('[data-action="register"]')?.click();return;}const lines=state.bands.filter(b=>qty(b)>0).map(b=>({id:b.id,quantity:qty(b)}));if(!lines.length){shake(e.submitter||form.querySelector('[data-calc-save]'),'is-shake');error(Error('Count at least one band first.'));return;}save('/api/counts',{requestId:draft.requestId,pricesRevision:state.pricesRevision,lines,notes:draft.notes},'saved');});
-    root.querySelectorAll('[data-discard]').forEach(b=>b.addEventListener('click',()=>{clearDraft(draftKey);draft=blank();noteOpen=false;onClean();message='';undoRemove=null;render();}));
+    // What the screenshots filled in goes with the count, so they can fill a fresh one.
+    root.querySelectorAll('[data-discard]').forEach(b=>b.addEventListener('click',()=>{clearDraft(draftKey);draft=blank();noteOpen=false;onClean();message='';undoRemove=null;for(const s of shots){s.added=false;s.addedQty=undefined;}render();}));
     const note=form?.querySelector('#finance-note');if(note){growNote(note);note.addEventListener('input',()=>growNote(note));}
     root.querySelector('[data-note-toggle]')?.addEventListener('click',e=>{noteOpen=true;e.currentTarget.hidden=true;const box=root.querySelector('[data-calc-note]');box.hidden=false;growNote(note);note.focus();});
     bindScan();

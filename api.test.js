@@ -1,10 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtempSync,rmSync} from 'node:fs';
+import {mkdtempSync,rmSync,writeFileSync,readFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {randomBytes} from 'node:crypto';
+import {spawnSync} from 'node:child_process';
 import {createApi,restoreSnapshot} from './api.mjs';
+import {encryptBackup} from './security-crypto.mjs';
 import {createDevApi} from './dev-api.mjs';
 
 const origin='http://127.0.0.1:4173',password='Development-Test-Password-123';
@@ -157,4 +159,19 @@ test('a snapshot restores into a fresh database with logins and history intact',
   const login=await restored.handle(request('/api/auth/login','POST',{username:'runner.one',password}));assert.equal(login.status,200);
   const after=(await call(restored,'/api/me','GET',undefined,token(login))).body;assert.equal(after.counts.length,1);assert.equal(after.counts[0].total,150000);
   assert.throws(()=>restoreSnapshot({...api.snapshot(),format:'pto-full-backup'}),/Unsupported backup/);
+});
+
+test('restore-backup.mjs restores a downloaded calculator backup into a new directory',async t=>{
+  const {api,memberCookie}=await fixture(t);
+  const me=(await call(api,'/api/me','GET',undefined,memberCookie)).body;
+  await call(api,'/api/counts','POST',countBody(me,[0,2]),memberCookie);
+  const dir=mkdtempSync(path.join(tmpdir(),'band-restore-'));let restored;
+  t.after(()=>{restored?.close();rmSync(dir,{recursive:true,force:true});});
+  const passphrase='a restore test passphrase',file=path.join(dir,'backup.ptobak'),target=path.join(dir,'restored');
+  writeFileSync(file,JSON.stringify(await encryptBackup(api.snapshot(),passphrase)));
+  const run=spawnSync(process.execPath,['restore-backup.mjs',file,target],{cwd:import.meta.dirname,env:{...process.env,PTO_BACKUP_PASSWORD:passphrase},encoding:'utf8'});
+  assert.equal(run.status,0,run.stderr);
+  restored=createApi({file:path.join(target,'pto-dev.sqlite'),key:readFileSync(path.join(target,'security.key')),cookieName:'pto_test'});
+  const login=await restored.handle(request('/api/auth/login','POST',{username:'runner.one',password}));assert.equal(login.status,200);
+  const after=(await call(restored,'/api/me','GET',undefined,token(login))).body;assert.equal(after.counts.length,1);assert.equal(after.counts[0].total,20000);
 });

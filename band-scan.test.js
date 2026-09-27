@@ -11,7 +11,7 @@ const BANDS=[
 ];
 
 test('a count is only ever what follows the x, so a stray number is not a quantity',()=>{
-  assert.deepEqual(parseRow({left:'x5',right:'500 g'}),{n:5,grams:500,bare:false,guess:null});
+  assert.deepEqual(parseRow({left:'x5',right:'500 g'}),{n:5,grams:500,bare:false,guess:null,labelled:true});
   // Hotbar slots print their key number to the left of the count.
   assert.equal(parseRow({left:'3 x5',right:'500 g'}).n,5);
   // A bare number is the hotbar key or the wreckage of a crop that slipped. Reading one as a quantity
@@ -25,11 +25,16 @@ test('look-alike letters are read back as the digits they are',()=>{
   assert.equal(parseRow({left:'xB',right:'800 g'}).n,8);
 });
 
-test('a kilogram weight with its decimal point lost is thrown away, not believed',()=>{
-  // The panel always prints kg with two decimals and grams whole, so "100k" is a mangled "1.00 kg".
-  assert.equal(parseRow({left:'',right:'100k'}).grams,null);
+test('a kilogram weight that lost its point gets it back, never read as a hundred kilos',()=>{
+  // The panel always prints kg with two decimals, so "100k" is "1.00 kg" with the point lost ("Look").
+  assert.equal(parseRow({left:'',right:'100k'}).grams,1000);
+  assert.equal(parseRow({left:'',right:'Look'}).grams,1000);
+  assert.equal(parseRow({left:'',right:'1350 kg'}).grams,13500);
+  assert.equal(parseRow({left:'',right:'10k'}).grams,null);
   assert.equal(parseRow({left:'',right:'1.00 kg'}).grams,1000);
   assert.equal(parseRow({left:'',right:'13.50 kg'}).grams,13500);
+  // A stray mark in front of the weight is not the weight.
+  assert.equal(parseRow({left:'x5',right:'8 S00 g'}).grams,500);
 });
 
 test('an empty count corner beside a weight is itself the answer',()=>{
@@ -42,7 +47,37 @@ test('count and weight check each other, and the weight wins a disagreement',()=
   assert.deepEqual(resolveCount({n:5,grams:500,bare:false},100),{qty:5,sure:true});
   // The weight is the bigger, cleaner text; a misread count is flagged rather than trusted.
   assert.deepEqual(resolveCount({n:1,grams:500,bare:false},100),{qty:5,sure:false});
-  assert.deepEqual(resolveCount({n:7,grams:null,bare:false},100),{qty:7,sure:true});
+  // A count with no weight to check it against is offered, not vouched for.
+  assert.deepEqual(resolveCount({n:7,grams:null,bare:false},100),{qty:7,sure:false});
+});
+
+test('sure takes the count and the weight agreeing, never one of them alone',()=>{
+  // "x10  1.00 kg" once came back as "ao  100%": the weight lost its point and its kg.
+  assert.deepEqual(resolveCount(parseRow({left:'ao',right:'100%'}),100),{qty:1,sure:false});
+  // A weight of two beside an empty corner means the "x2" was lost.
+  assert.deepEqual(resolveCount(parseRow({left:'',right:'200 g'}),100),{qty:2,sure:false});
+  // Something in the corner nobody could read, beside a clean weight, is still only one of the two.
+  assert.deepEqual(resolveCount(parseRow({left:'xa',right:'500 g'}),100),{qty:5,sure:false});
+  // The game never draws "x1": it is "x10" with a digit lost, and on its own it is no count at all.
+  assert.deepEqual(resolveCount(parseRow({left:'x1',right:''}),100),{qty:null,sure:false});
+  assert.deepEqual(resolveCount(parseRow({left:'x1',right:'1.00 kg'}),100),{qty:10,sure:false});
+});
+
+test('two reads of one slot settle it only when everything they made out agrees',()=>{
+  // The first read lost the weight's kg, the second the count: between them, count and weight agree.
+  assert.deepEqual(resolveCount([parseRow({left:'x10',right:'ioo%'}),parseRow({left:'',right:'1.00 kg'})],100),{qty:10,sure:true});
+  // Reads that disagree leave the slot in doubt, showing what most of them said.
+  assert.deepEqual(resolveCount([parseRow({left:'x10',right:'500 g'}),parseRow({left:'x10',right:''})],100),{qty:10,sure:false});
+  // A second read that agrees with itself is not enough when the first one saw something else.
+  assert.deepEqual(resolveCount([parseRow({left:'x5',right:''}),parseRow({left:'x8',right:'800 g'})],100),{qty:8,sure:false});
+});
+
+test('a gram weight whose g came back as a digit is mended, anything else four digits long is dropped',()=>{
+  // From 1000 g up the game prints kg, so "2008" is "200 g" with the g read as an 8.
+  assert.equal(parseRow({left:'x2',right:'2008'}).grams,200);
+  assert.deepEqual(resolveCount(parseRow({left:'x2',right:'2008'}),100),{qty:2,sure:true});
+  assert.equal(parseRow({left:'x2',right:'2005'}).grams,null);
+  assert.deepEqual(resolveCount(parseRow({left:'x2',right:'2005'}),100),{qty:2,sure:false});
 });
 
 test('a slot nobody can stand behind comes back blank instead of guessed',()=>{
@@ -57,12 +92,12 @@ test('the grams per band are learned from whatever the screenshot showed',()=>{
     {bandId:'band-3',n:3,grams:300,bare:false},
     {bandId:'band-6',n:null,grams:200,bare:true}
   ];
-  assert.deepEqual(inferUnits(rows),{'band-3':100,'band-6':200});
-  // A counted stack outranks a lone item of the same band.
+  // A lone item is no evidence: its empty corner may be a count the reader lost ("x2  200 g").
+  assert.deepEqual(inferUnits(rows),{'band-3':100});
   assert.equal(inferUnits([{bandId:'band-1',n:null,grams:500,bare:true},{bandId:'band-1',n:10,grams:1000,bare:false}])['band-1'],100);
-  // A misread count gives an odd ratio, which is no evidence at all.
+  // A misread count gives an odd ratio, which is no evidence at all, and neither is an "x1".
   assert.deepEqual(inferUnits([{bandId:'band-1',n:3,grams:500,bare:false}]),{});
-  assert.equal(inferUnits([],{'band-1':100})['band-1'],100);
+  assert.deepEqual(inferUnits([{bandId:'band-1',n:1,grams:1000,bare:false}]),{});
 });
 
 test('a band that never showed a count falls back to what the rest of the screenshot weighs',()=>{
@@ -75,7 +110,9 @@ test('a band that never showed a count falls back to what the rest of the screen
 test('loose change weighs half a band and a violet stack double, whatever the rest of the shot weighs',()=>{
   assert.equal(usualUnit('Loose change'),50);
   assert.equal(usualUnit('Violet band'),200);
-  assert.equal(usualUnit('White band'),null);
+  assert.equal(usualUnit('White band'),100);
+  assert.equal(usualUnit('Brown Stack'),100);
+  assert.equal(usualUnit('Gold bar'),null);
   // "x2  100 g" of loose change with the x lost: 100 g is two coins' worth, not one band's.
   assert.deepEqual(resolveCount(parseRow({left:'2',right:'100g'}),usualUnit('Loose change')),{qty:2,sure:true});
   assert.deepEqual(resolveCount(parseRow({left:'x24',right:'1.20 kg'}),usualUnit('Loose change')),{qty:24,sure:true});
@@ -139,10 +176,13 @@ test('an unusual layout is left alone rather than forced onto a grid',()=>{
   assert.equal(lattice([{x0:0,y0:0},{x0:5,y0:0},{x0:0,y0:5},{x0:5,y0:5}],20),null);// slots too close together
 });
 
-test('a count whose x went missing is offered as a guess, and a weight of 0 g is no weight',()=>{
+test('a count whose x went missing counts only when the weight agrees, and a weight of 0 g is no weight',()=>{
   const row=parseRow({left:'2',right:'eoog'});
   assert.equal(row.grams,null);assert.equal(row.guess,2);
-  assert.deepEqual(resolveCount(row,100),{qty:2,sure:false});
+  // Alone it names nothing: "x5" comes back as a bare "3" often enough.
+  assert.deepEqual(resolveCount(row,100),{qty:null,sure:false});
+  assert.deepEqual(resolveCount([parseRow({left:'3',right:'eoog'}),parseRow({left:'3',right:''})],100),{qty:null,sure:false});
+  assert.deepEqual(resolveCount([parseRow({left:'3',right:'song'}),parseRow({left:'3',right:'S00 g'})],100),{qty:5,sure:false});
   // The weight still settles it when it can be read, and a lone "1" is never a stack.
   assert.deepEqual(resolveCount(parseRow({left:'2',right:'200 g'}),100),{qty:2,sure:true});
   assert.equal(resolveCount(parseRow({left:'1',right:''}),100).qty,null);

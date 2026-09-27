@@ -1,54 +1,78 @@
 # Band Calculator security
 
-Both the loopback development server and hosted Worker enforce application login, approval, roles and two-factor policies. GitHub Pages serves only allowlisted public assets; private accounts and records remain in the backend.
+The calculator needs no account. Counting, quick math and screenshot scanning all run in the browser, and a scanned screenshot is never uploaded. Accounts exist only to save counts. Every rule below is enforced by the backend, `api.mjs`, which runs either in the local server (`server.mjs`) or in the hosted Cloudflare Worker. GitHub Pages serves only the public files listed in `release.json`.
 
-## Owner setup
+## Who can do what
 
-1. Open **Review security** or the account menu's **Account settings**.
-2. Choose **Set up two-factor**, confirm your current password, scan the locally generated QR code in an authenticator, and confirm a fresh six-digit code.
-3. Save the recovery codes in a private password manager or another secure location. They are shown once.
-4. Open **Admin protection**, enter your password and a fresh authenticator code, and choose **Require two-factor for admins**. The Owner and roles with Manage on People & roles must then enroll before opening workspace data. The requirement cannot be disabled through the UI.
+| Who | Can |
+|---|---|
+| Guest | Use the calculator, scanner and quick math. Nothing is saved except a draft in this browser. |
+| Member | Save counts to their own running total, cash out, see their own History, change their display name and password, set up two-factor. |
+| Owner | Everything a member can, plus edit prices, disable or re-enable accounts, read Activity and download encrypted backups. |
 
-Two-factor is not enabled automatically on a real user's behalf. Existing local accounts keep their passwords and access until the Owner enables the admin requirement. Non-admin accounts can enroll voluntarily. A stolen administrator session is still sensitive: only grant global role administration to trusted people.
+The server checks the signed-in account on every request. A member only ever sees and changes their own counts. Owner tools answer 403 to everyone else.
 
-## Authentication and recovery
+## Signing up and signing in
 
-- Passwords use salted scrypt. Login attempts are reserved in SQLite before password work; account IDs unify username/email aliases, a separate bucket uses the socket's client address, and expensive password operations are bounded. Request headers cannot supply a trusted client address. Limits survive server restarts and expire after their windows.
-- RFC 6238 TOTP uses 30-second periods and a one-step clock tolerance. Accepted codes cannot be replayed. QR generation occurs on the server without sending secrets to a third party. Authenticator secrets are AES-256-GCM encrypted with the private local key.
-- Password-only login creates a five-minute challenge when MFA is enabled. It does not create an authenticated session. Password changes, enrollment, account recovery, and explicit session revocation invalidate other sessions/challenges as applicable.
-- **Trouble signing in?** accepts a username, recovery code, and replacement password. Recovery codes contain 96 bits of randomness and only account-bound hashes are stored. A successful recovery expires the entire code set, removes the old authenticator, and signs out all devices. Approval status and roles do not change. Admins must re-enroll when the admin policy is enabled.
-- Regenerating recovery codes, changing passwords, requiring admin MFA, signing out other sessions, and exporting full backups require password confirmation and a fresh authenticator code when enrolled. There is no email reset service, universal reset password, or admin-readable password.
-- Sessions use random tokens stored as hashes with HttpOnly cookies. Keep me signed in is checked by default and uses a 30-day server expiry and persistent cookie; unchecking it uses a browser-session cookie with a 12-hour server expiry. Development is HTTP on loopback only. Hosted cookies use Secure; same-origin uses SameSite=Strict and GitHub Pages uses SameSite=None; Partitioned with credentialed requests allowed only from the exact Pages origin. The current-page bearer fallback stays only in memory. Passwords and tokens are never stored in URLs/localStorage/sessionStorage. MFA challenges preserve the chosen duration without authenticating until verification. Logout/revocation and account recovery remain effective, and restored backups contain no sessions. The local development server must not be exposed through a public tunnel.
+- Anyone can create an account, and it works straight away. Usernames are 3–32 letters, numbers, dots, underscores or hyphens. Passwords are 12–128 characters.
+- A new local database starts empty. Its first account must be the Owner, made on the setup screen, and sign-ups are refused until then. The hosted Worker guards Owner setup with the private `SETUP_CODE` secret instead, so sign-ups there never wait on it.
+- Passwords are stored only as salted scrypt hashes. New passwords on the Worker use a lighter setting (N=4096, tagged `s4096.8.1$`) to fit the Workers Free CPU limit; older, stronger hashes still verify.
+- Limits, per 10 minutes: 8 sign-in attempts per account, 120 per network address, 5 Owner-setup attempts and 10 sign-ups per address. At most four password checks run at once. Saving counts is limited to 120 a minute per account.
+- An unknown username costs the same password work as a real one, and a wrong password, unknown user and disabled account all get the same message. Failed sign-ins on real accounts are recorded in Activity.
 
-## Activity and backups
+## Sessions
 
-Account-linked finances use dedicated server endpoints. My stash View permits only the signed-in account's submissions and personal history; Treasury View exposes the gang queue, and Treasury Manage permits payout/rejection and weekly-payment confirmations. Server-selected rates are frozen per deposit. A payout must match both the reviewed entry IDs and amount, and non-Owner managers need another manager to confirm their own payout. The authenticated Owner may confirm their own payout; request-body fields cannot grant this exception. Unique request IDs and atomic commits prevent duplicate payment records. Paid/rejected entries retain actor and time; generic ledger writes cannot replace finance history.
+- A session is a random 32-byte token. The server keeps only its hash.
+- **Keep me signed in** is on by default: the session lasts 30 days and survives closing the browser. With it off, the session ends after 12 hours or when the browser closes.
+- Locally the cookie is `HttpOnly` and `SameSite=Strict`, over plain HTTP on the loopback address only. Never expose the local server through a public tunnel.
+- On the hosted site, the page (GitHub Pages) and the API (the Worker) are different sites. The Worker's cookie is `__Host-band_session`: `HttpOnly`, `Secure`, `SameSite=None`, `Partitioned`. CORS answers only `https://blazzer10200.github.io`.
+- Browsers that block that cookie still work. The Worker also returns the token in an `X-PTO-Session` header; the page keeps it in `sessionStorage` (this tab only, gone when the tab closes) and sends it back as `Authorization: Bearer`. It is cleared on sign-out and on any 401.
+- Every request that changes something must come from the site's own origin and carry `X-Bandbook-Request: 1`, which stops cross-site form posts.
+- Changing the password needs the current password, plus a fresh authenticator code when two-factor is on, and signs out every other device. **Sign out other devices** does the same without a password change.
 
-Roster removal requires Roster Manage and a current workspace revision. It does not revoke the person's website access. Account deletion requires People & roles Manage, the exact username, and current account/workspace revisions; Owner/self deletion and deletion with pending deposits are blocked. The atomic deletion removes the user, linked roster profile, sessions, MFA challenges, authenticator record and recovery codes. Historical finance records and audit events retain their saved identities; historical backups remain unchanged.
+## Two-factor and recovery
 
-Full encrypted backups include account-linked deposits, payouts and weekly bills. The ordinary Settings JSON export covers roster and earlier ledger records; its restore preserves current account-linked finances.
+- Two-factor is optional for members. It is TOTP per RFC 6238: SHA-1, six digits, 30-second steps, one step of clock drift either way. An accepted code can't be used again.
+- The QR code is drawn by the server, so the secret never goes to a third party. Authenticator secrets are stored encrypted (AES-256-GCM) with the server key: `.local/security.key` locally, the `BAND_KEY` secret on the Worker.
+- With two-factor on, a correct password only opens a five-minute challenge. No session exists until the code is entered.
+- Turning two-factor on shows eight recovery codes once. Each has 96 random bits and only its hash is stored. It also signs out other devices.
+- **Trouble signing in?** takes a username, one recovery code and a new password. It uses up the whole set of codes, removes the authenticator and signs out every device. There is no email reset, no master password, and no one can read a password.
+- These need a fresh password, plus an authenticator code when two-factor is on: changing the password, new recovery codes, signing out other devices, the Owner requirement below, and downloading a backup.
 
-**People & roles → Activity** is limited to account administrators. It displays actor, time, account/workspace events, and access-change summaries, with pagination. New audit records retain the actor name after deletion. Existing records without a stored actor name cannot reconstruct a deleted identity. Stored workspace snapshots and security details are not returned in this activity feed. This local database is not a tamper-proof external audit service.
+### Owner setup
 
-The server creates at most one encrypted daily snapshot under `.local/backups/` at startup or an hourly check while running. The Backups tab reports the snapshot time or an error. No automatic deletion/retention cleanup is configured. These snapshots require the original `.local/security.key`; keep that key private and backed up separately. Snapshots on the same drive do not protect against losing the computer.
+1. Open the account menu → **Account settings** and set up two-factor. Save the recovery codes somewhere private, such as a password manager.
+2. Turn on **Require two-factor for the Owner**. It needs two-factor and recovery codes to be set up first, and there is no switch to turn it back off. While it is on, an Owner without two-factor can only sign in, sign out or change their password until they set it up.
 
-**People & roles → Backups** lets the Owner download a complete encrypted backup protected by a separate 15–128-character passphrase. It contains accounts, password hashes, encrypted MFA configuration and its key, recovery-code hashes, roles, security policy, workspace, and activity. Sessions, pending MFA enrollment secrets, challenges, and rate-limit buckets are excluded. The workspace includes account-linked deposits, payouts, reversals, cashbook, calendar, availability, private notes, and notification read state. A roster/earlier-ledger JSON download under Settings is **not** a full backup.
+## Owner tools
 
-`restore-backup.mjs` validates and restores only into a **new directory**, never the live workspace. For a downloaded `.ptobak`, the operator supplies `PTO_BACKUP_PASSWORD` privately in the environment and runs `node restore-backup.mjs BACKUP_FILE NEW_DIRECTORY`. For a local daily snapshot, supply `PTO_BACKUP_KEY_FILE` pointing to the original key instead. Clear temporary environment secrets afterward. The restored directory contains a database/key pair, without signed-in sessions. Verify the copy before an explicitly authorized switchover. A forgotten backup passphrase cannot be recovered.
+- **Prices.** Only the Owner changes band prices (Admin → Prices). Each save carries the prices revision it started from, and a stale save gets a 409 instead of overwriting newer prices. Every saved count keeps the band name, color and price it was saved with, so a price change never rewrites history.
+- **Accounts.** The Owner can disable or re-enable any other account. Disabling signs it out everywhere and blocks sign-in; its counts are kept. The Owner's own row is protected.
+- **Activity.** Who did what and when: accounts created, sign-ins and failed sign-ins, password and name changes, two-factor changes, recovery, price edits (before and after), accounts disabled or enabled, backups downloaded. It lives in the same database, so it is a record, not a tamper-proof external log.
+
+## Backups
+
+- **Admin → Backups** downloads a full encrypted backup protected by its own 15–128 character passphrase (scrypt, then AES-256-GCM). It holds accounts and password hashes, two-factor settings with the key that opens them, recovery-code hashes, the security policy, prices, counts, cash-outs and Activity. Sessions and half-finished two-factor setups are left out. A forgotten passphrase can't be recovered.
+- The local server also writes one encrypted snapshot a day to `.local/backups/` (checked at startup and every hour), sealed with `.local/security.key`. Nothing deletes old snapshots. They are useless without that key, and they sit on the same drive, so keep the key and a downloaded backup somewhere else too. The hosted Worker makes no automatic snapshots; download backups from the Backups tab.
+- `restore-backup.mjs` never touches live data. It restores into a directory that must not exist yet, and checks the whole backup in memory before writing anything:
+
+  ```bash
+  node restore-backup.mjs BACKUP_FILE NEW_DIRECTORY
+  ```
+
+  Put the passphrase in `PTO_BACKUP_PASSWORD` for a downloaded backup, or point `PTO_BACKUP_KEY_FILE` at the original key for a daily snapshot, and clear it afterwards. It restores calculator backups (`pto-calc-backup`) and ones from the old roster app (`pto-full-backup`). The new directory gets `pto-dev.sqlite` and `security.key`, with nobody signed in. Check the copy before switching to it.
+
+## In this browser
+
+- Tile counts that aren't saved yet are kept as a draft in `localStorage` for 24 hours, separately for each account and for guests, so a reload doesn't lose them. A guest draft moves into the account on sign-in. Saving or discarding clears it, and signing out clears every draft in this browser. Passwords and session tokens are never stored there.
+- The panel layout, view preferences and names you've taught the scanner are kept in this browser too.
+- On a shared computer, sign out when you're done.
 
 ## Hosted operation
 
-- The Cloudflare Worker (`cloudflare-worker.mjs`) runs the same `api.mjs` inside one SQLite Durable Object. `BAND_KEY` and `SETUP_CODE` are private Worker secrets.
-- GitHub Pages CORS is restricted to the configured GitHub origin. Public pages have a CSP meta policy; hosted responses add frame protection and no-store API headers. No ChatGPT login is involved.
-- Complete Owner MFA/recovery setup, require admin MFA, and configure off-device encrypted backups plus a tested restoration procedure.
-- Review signup abuse controls against real traffic and verify recovery, session revocation, audit access, and security headers on the final domain. Run the security regression tests and dependency audit.
+- The Worker (`cloudflare-worker.mjs`) runs the same `api.mjs` inside one SQLite Durable Object. `BAND_KEY` and `SETUP_CODE` are Worker secrets and never go in the repo.
+- The local server sends the security headers (CSP, `X-Frame-Options: DENY`, `nosniff`, `Referrer-Policy: no-referrer`, `Permissions-Policy`). The Pages site carries its CSP in a `<meta>` tag whose `connect-src` includes the Worker. API responses are `Cache-Control: no-store`.
+- Pages publishes only the files in `release.json`, and the workflow checks the module graph (`verify-release.mjs`) before uploading. Both deploys are manual; when API endpoints change, deploy the Worker first.
+- Owner checklist: two-factor on, recovery codes stored, Owner requirement on, an encrypted backup kept off this computer with its passphrase stored separately, and a test restore now and then.
 
-Implementation references: [RFC 6238](https://www.rfc-editor.org/rfc/rfc6238), [OWASP MFA guidance](https://cheatsheetseries.owasp.org/cheatsheets/Multifactor_Authentication_Cheat_Sheet.html). The TOTP tests include the RFC's SHA-1 test vectors.
-
-## Drafts and role safety
-
-Stash draft quantities and notes are namespaced to the signed-in account in device storage for 24 hours. Submitting, discarding, signing out, or detecting loss of authentication clears drafts. Passwords and session tokens are not stored there. This convenience is device-local; shared-device users should sign out when finished.
-
-Account access changes require the current access revision. A stale form cannot undo a newer disable or role change. True no-op saves preserve sessions; actual changes revoke them. Menu category moves preserve previous effective page grants. Private leadership notes are enforced by the server, separately from shared roster notes.
-
-Owner-only reversal and reconciliation controls retain the original finance record and record who corrected it and why. Partial payouts cannot exceed outstanding amounts. Payouts validate the exact reviewed deposit set and balance; idempotent request IDs prevent duplicate payment on retries. Optional deposit verification is a separate check from payment confirmation.
+References: [RFC 6238](https://www.rfc-editor.org/rfc/rfc6238), [OWASP MFA cheat sheet](https://cheatsheetseries.owasp.org/cheatsheets/Multifactor_Authentication_Cheat_Sheet.html). The TOTP tests include the RFC's SHA-1 test vectors.

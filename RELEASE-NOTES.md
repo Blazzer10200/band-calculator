@@ -1,5 +1,56 @@
 # Workspace release — September 2026
 
+## September 27 — Scanner accuracy, fixes and docs
+
+The screenshot scanner was reworked around one rule: it would rather ask than be wrong. Only the site
+changed; the accounts server (Worker) is the same, so it needs no new deploy.
+
+- **Count and weight are read apart.** Each slot's `xN` count and its weight are cut into separate
+  pieces and read on their own, so one can't bleed into the other.
+- **Weights are fixed facts.** Every band stack weighs 100 g, Violet 200 g and Loose change 50 g, and the
+  scanner checks every count against that. Nothing carries over from one screenshot to the next, so one
+  odd screenshot can't throw off the next one.
+- **Green means the count and the weight agree.** A slot is only marked sure when every read of its count
+  matches its weight. Otherwise it is amber ("double-check this one") with the best-supported number
+  filled in, or "?" when nothing can be trusted.
+- **A number without its "x" is never trusted on its own.** A bare "2" could be a count that lost its x,
+  a hotbar key, or "x5" misread as "3". It now counts only when the weight says the same. (This replaces
+  the September 25 change that used such numbers with a flag.)
+- **A closer second look.** Every slot that isn't sure after the first read is read again, cropped
+  tighter and turned into pure black and white first. Thin text on a dark slot used to vanish on both
+  reads.
+- **Weight misreads are repaired.** "1.00 kg" read without its point, "200 g" read as "2008", and a
+  weight of "0 g" (a lost first digit) are fixed or ignored instead of turning ten bands into a thousand.
+- The example screenshot that started this (Brown ×2, Purple ×2, Blue 1, White ×10 at 1.00 kg, White 1)
+  now reads exactly right.
+
+Other fixes:
+
+- **Saving never loses or doubles a count.** If a save reaches the server but the reply is lost, the
+  retry is recognized and the count is recorded once, and anything counted in the meantime stays unsaved
+  instead of disappearing.
+- **Teaching a name adds only what's new.** After you tell the viewer what an unknown name is, filling in
+  again adds just the newly recognized bands, not the whole screenshot a second time.
+- **Discard frees its screenshots**, so they can be added to the next count.
+- **Money with cents shows both digits:** $12.30, not $12.3.
+- **Arranged panels stay on screen.** A panel can no longer be dragged or saved past the right edge.
+- **History day totals match your filters** and no longer change when you press **Show more**.
+- **The restore tool reads calculator backups.** `restore-backup.mjs` only understood the old roster
+  app's backups; it now restores ones made by the calculator too (local or hosted).
+- **The publish workflow checks the build** (`verify-release.mjs`, same as `npm run verify:build`)
+  before uploading anything.
+- **The scan viewer closes when you change pages** and leaves nothing listening behind it.
+- `SECURITY.md` was rewritten for the calculator (it still described the roster app), and the README,
+  `docs/DEVELOPMENT.md`, `AGENTS.md` and `CLAUDE.md` were brought up to date.
+
+### Checks
+
+- Scanner bench, 9 hand-counted screenshots including the example above: all 678 bands right, none
+  wrong. 8 of 106 slots are flagged for a double-check (15 before this round).
+- `npm test` (100), `npm run check`, `npm run verify:build`, `git diff --check`: pass.
+- Sample server in the browser: the example screenshot through the viewer and Fill in counts, teaching a
+  name and filling in again, saving, and a save whose reply is lost and then retried. No console errors.
+
 ## September 25 (evening) — Scan viewer, picture-only inventories (released)
 
 - **A viewer opens when you add a screenshot.** Your screenshot sits on the left with a box around every

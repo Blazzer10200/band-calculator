@@ -38,11 +38,19 @@ band-scan.js           screenshot OCR (ocr-engine/ocr-worker/ocr-core + eng.trai
                        Three passes. Pass 1 sweeps the whole image for "<Color> Stack" names and is used only to
                        locate slots. Those names feed `lattice()`, which infers the slot grid; pass 2 re-reads every
                        cell close up (this is what stops a slot vanishing). Pass 3 crops each slot's count row and
-                       reads "xN" + weight, cross-checking them (100 g per band, violet 200 g); slots that come back
-                       with neither get one retry at a tighter crop. Contrast is stretched per crop (median =
+                       splits it at .42: "xN" on the left, the weight read as its own line (`readTiles`). Units are
+                       game facts by name (`usualUnit`: band/stack 100 g, Violet 200 g, Loose change 50 g); only
+                       names those don't cover borrow this screenshot's units (`inferUnits`/`commonUnit`, multiples
+                       of 10 only). Nothing is kept between screenshots. `resolveCount`: sure ONLY when every count
+                       read (or an empty count corner = 1) and the labelled weight agree; otherwise flagged with
+                       votes (count 1, weight 1.1), then the unlabelled weight, then `qty:null` ("?"). A bare number
+                       with no x is a guess: it can make a slot sure by matching the weight, never names the number
+                       alone. Every not-sure slot is read again at a tighter crop (`slotRows(...,1)`), cut to black
+                       and white at `RETRY_INK` = 80 after the stretch (Tesseract's own threshold blanked thin-ink
+                       strips), and both reads are weighed together. Weight repairs: kg without its point ("100k" =
+                       1.00 kg), "2008" = 200 g, 0 g = no weight. Contrast is stretched per crop (median =
                        background, so grey hotbar slots read) and long dark runs are painted out as slot borders.
-                       Unit votes only accept multiples of 10. Unreconcilable slot -> `qty:null` ("?"); a bare
-                       left number with no x/weight is kept only as `sure:false` ("double-check"). Grid lines within
+                       Grid lines within
                        2 name-heights are merged — the panel is drawn in perspective and the drift once split one row
                        in two, double-counting every slot on it.
                        PICTURE VIEW (no names, no weights; used only when pass 1 finds no names): slots come from the
@@ -51,9 +59,12 @@ band-scan.js           screenshot OCR (ocr-engine/ocr-worker/ocr-core + eng.trai
                        white by share, else Loose change). Count = the boxed badge top-right (`findBadge`), all badges
                        read on one line at two sizes after a hard threshold (the contrast stretch broke tiny digits);
                        both reads must agree to be sure. No badge = 1. Every item carries `box` + `confidence`.
-                       Bench: `.local/scan/` (gitignored) — hand-counted TRUTH over 8 screenshots (shot7/8 = badge
-                       view), `pto-scan-harness` in .claude/launch.json serves it on 4180; `viewer.html` there runs
-                       the real scan viewer on them. Run the bench before and after any scanner change.
+                       Bench: `.local/scan/` (gitignored) — hand-counted TRUTH over 9 screenshots, 678 bands, 106
+                       slots (shot7/8 = badge view, shot9 = the user's 2026-09-27 example). `pto-scan-harness` in
+                       .claude/launch.json serves it on 4180; `viewer.html` there runs the real scan viewer on them,
+                       and 4180/index.html is the real app with /api/* proxied to the sample server (4174, never
+                       4173). 2026-09-27: 678/678 right, 8/106 slots flagged. Run the bench before and after any
+                       scanner change: no band may go wrong, and the flagged count should not grow.
 scan-viewer.js         the modal that opens when a screenshot is added: screenshot with a box per slot (hover a row
                        to zoom), editable counts, "Fill in counts" (adds to the tiles once per screenshot), "Not bands"
                        chips to teach a name. Reads nothing itself; draws what band-scan.js returned.
@@ -98,7 +109,7 @@ Static files are served from disk: reload after editing browser code. Server imp
 ## Claude tooling notes
 
 - No Svelte/Python/Rust here, so `/check` and `/test` have nothing to detect. Use the npm scripts below directly.
-- LSP works for `.js`/`.mjs` (tsserver). `Grep` honors `.gitignore`, so `.local/` and `dist/` stay out of results.
+- No LSP tool in this install; find symbols with `Grep`. `Grep` honors `.gitignore`, so `.local/` and `dist/` stay out of results.
 - Screenshots: `get_page_text` / `read_page` first; screenshot only when layout matters. Use the `data-page`, `data-admin-tab`, `data-finance-quantity` selectors from `docs/DEVELOPMENT.md`.
 - Requires Node 24+ (SQLite tests). Installed: v24.19.0.
 
@@ -106,7 +117,8 @@ Static files are served from disk: reload after editing browser code. Server imp
 
 ```bash
 npm run check          # node --check on every module (syntax)
-npm test               # full node --test suite (96 tests, SQLite integration included)
+npm test               # full node --test suite (100 tests, SQLite integration included)
+node --test band-scan.test.js   # scanner reading rules (plus the bench above for any scanner change)
 npm run test:api       # the calculator backend (api.mjs)
 npm run test:finance   # legacy: money, bills, presence
 npm run test:access    # legacy: identity, permissions, approvals, auth

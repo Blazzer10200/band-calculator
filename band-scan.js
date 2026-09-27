@@ -102,8 +102,10 @@ export function matchBand(text,bands,aliases={}){
 const readJson=(key)=>{try{const v=JSON.parse(localStorage.getItem(key)||'{}');return v&&typeof v==='object'?v:{};}catch{return {};}};
 const writeJson=(key,value)=>{try{localStorage.setItem(key,JSON.stringify(value));}catch{}};
 export function readAliases(){return readJson(ALIAS_KEY);}
-// What the scanner picked up can be wrong, and a wrong stack size quietly rewrites every later count, so it has to be forgettable.
-export const hasLearned=()=>Object.keys(readJson(ALIAS_KEY)).length>0||Object.keys(readJson(UNIT_KEY)).length>0;
+// A name the scanner was taught can be wrong, so it has to be forgettable. Stack sizes used to be learned
+// and kept too, until one bad read taught it 10 g Brown and every later stack of five came out as fifty;
+// scanImage clears what is left of them.
+export const hasLearned=()=>Object.keys(readJson(ALIAS_KEY)).length>0;
 export function forgetLearned(){for(const key of [ALIAS_KEY,UNIT_KEY])try{localStorage.removeItem(key);}catch{}}
 export function saveAlias(text,bandId){
   const aliases=readAliases(),key=normalizeName(text).join(' ');
@@ -293,7 +295,12 @@ function slotRows(names,unit,anchors,grid,half=1.2){
 }
 // Every crop is drawn into one tall strip, zoomed so the glyphs are about 44px, and read in one go.
 // Returns the words found in each crop, left to right, with the strip geometry to place them by.
-async function readTiles(worker,src,rows){
+// With `split`, the part of each crop right of that fraction of its width goes on a line of its own
+// under the rest. The panel is drawn tilted, so on a small screenshot the count sits half a letter
+// lower than the weight beside it, and read as one line "x10  1.00 kg" came back as "ao 100%". Apart,
+// each is one short word the reader has no trouble with. With `bin`, each crop is cut to black and white
+// at that level once it has been stretched.
+async function readTiles(worker,src,rows,split=0,bin=0){
   const unitPx=src.unit/src.scale,zoom=Math.max(1,Math.min(8,44/unitPx)),gap=Math.round(1.2*unitPx*zoom);
   const boxes=rows.map(r=>{
     const x0=Math.max(0,Math.round(r.x0/src.scale)),y0=Math.max(0,Math.round(r.y0/src.scale));
@@ -301,31 +308,40 @@ async function readTiles(worker,src,rows){
   });
   const canvas=document.createElement('canvas');
   canvas.width=Math.round(Math.max(1,...boxes.map(b=>b.w))*zoom)+2*gap;
-  let y=gap;const at=boxes.map(b=>{const h=Math.round(b.h*zoom);const a={y,h};y+=h+gap;return a;});
+  let y=gap;const at=boxes.map(b=>{const h=Math.round(b.h*zoom),a={y,h,y2:split?y+h+gap:y};y=a.y2+h+gap;return a;});
   canvas.height=y;
   const ctx=canvas.getContext('2d',{willReadFrequently:true});ctx.fillStyle='#fff';ctx.fillRect(0,0,canvas.width,canvas.height);ctx.imageSmoothingQuality='high';
   // Each row is stretched on its own: a hotbar slot sits on a grey panel, an inventory slot on black.
+  // It is stretched whole before any split, so an empty count corner is not blown up out of its own noise.
   boxes.forEach((b,i)=>{
     if(!b.w||!b.h)return;
-    const w=Math.round(b.w*zoom);
-    ctx.drawImage(src.bitmap,b.x0,b.y0,b.w,b.h,gap,at[i].y,w,at[i].h);
-    enhance(ctx,gap,at[i].y,w,at[i].h,{invert:true,fromMedian:true});
-    stripRules(ctx,gap,at[i].y,w,at[i].h);
+    const w=Math.round(b.w*zoom),{y,h,y2}=at[i];
+    ctx.drawImage(src.bitmap,b.x0,b.y0,b.w,b.h,gap,y,w,h);
+    enhance(ctx,gap,y,w,h,{invert:true,fromMedian:true});
+    stripRules(ctx,gap,y,w,h);
+    if(bin){const image=ctx.getImageData(gap,y,w,h),d=image.data;for(let i=0;i<d.length;i+=4)d[i]=d[i+1]=d[i+2]=d[i]<bin?0:255;ctx.putImageData(image,gap,y);}
+    if(split){const cut=Math.round(w*split);ctx.putImageData(ctx.getImageData(gap+cut,y,w-cut,h),gap+cut,y2);ctx.fillRect(gap+cut,y,w-cut,h);}
   });
   // Read as one block of text lines. No character whitelist: the LSTM engine drops words instead of
   // honouring it, and sparse mode throws the short "x5" away as noise. Look-alikes are fixed in parseRow.
   await worker.setParameters({tessedit_pageseg_mode:PSM.SINGLE_BLOCK,tessedit_char_whitelist:''});
   const {data}=await worker.recognize(await toBlob(canvas),{},{blocks:true});
   const words=(data.blocks||[]).flatMap(b=>b.paragraphs.flatMap(p=>p.lines.flatMap(l=>l.words))).map(w=>({text:w.text,x:w.bbox.x0,y:(w.bbox.y0+w.bbox.y1)/2,conf:w.confidence}));
-  const tiles=at.map((a,i)=>({words:words.filter(w=>w.y>=a.y-gap/2&&w.y<a.y+a.h+gap/2).sort((p,q)=>p.x-q.x),split:gap+boxes[i].w*zoom*.42}));
+  const line=(y,h)=>words.filter(w=>w.y>=y-gap/2&&w.y<y+h+gap/2).sort((p,q)=>p.x-q.x);
+  const tiles=at.map(({y,h,y2})=>split?{left:line(y,h),right:line(y2,h)}:{words:line(y,h)});
   globalThis.__scanDebug?.push(canvas.toDataURL());// off unless a dev sets it; .local/scan/crops.html renders the strips
+  globalThis.__scanGeometry?.push({at,gap,split});
   canvas.width=canvas.height=0;// the strip can run to tens of megabytes; let it go before the next pass
   return tiles;
 }
-// The count is the left third of the row, the weight the right part.
+// The count is the left part of the row, the weight the right part.
+// On the second look, anything darker than this after the stretch is ink and the rest is paper. Over the
+// bench, 48 left 12 slots unsure, 64 left 9, 80 left 8, 96 left 11 and 128 left 12. The first read stays
+// grey: cutting it too made it worse.
+const RETRY_INK=80;
 const meanConf=words=>words.length?words.reduce((n,w)=>n+w.conf,0)/words.length/100:0;
-const readRows=async(worker,src,rows)=>(await readTiles(worker,src,rows)).map(({words,split})=>
-  ({left:words.filter(w=>w.x<split).map(w=>w.text).join(' '),right:words.filter(w=>w.x>=split).map(w=>w.text).join(' '),conf:meanConf(words)}));
+const readRows=async(worker,src,rows,bin=0)=>(await readTiles(worker,src,rows,.42,bin)).map(({left,right})=>
+  ({left:left.map(w=>w.text).join(' '),right:right.map(w=>w.text).join(' '),conf:meanConf([...left,...right])}));
 // Second look at the slots whose name the first pass missed: the whole crop is one name.
 const readNames=async(worker,src,rows)=>(await readTiles(worker,src,rows)).map(({words})=>words.map(w=>w.text).join(' ').trim());
 // Left "x5" → count 5; right "500 g" → 500 grams ("1.00 kg" → 1000). Hotbar slots also print their
@@ -334,75 +350,103 @@ const readNames=async(worker,src,rows)=>(await readTiles(worker,src,rows)).map((
 // reading one as a quantity once turned a stack of ten into a hundred.
 export function parseRow({left,right}){
   // Small digits come back as look-alike letters now and then: S00 g, x1O, l.00 kg.
-  const fix=s=>s.toLowerCase().replace(/[s$]/g,'5').replace(/[od]/g,'0').replace(/[li|]/g,'1').replace(/b/g,'8').replace(/,/g,'.');
+  const fix=s=>s.toLowerCase().replace(/×/g,'x').replace(/[s$]/g,'5').replace(/[od]/g,'0').replace(/[li|]/g,'1').replace(/b/g,'8').replace(/,/g,'.');
   const l=fix(left),r=fix(right);
   // A big stack can carry a thousands separator ("x1,250"), which fix() has just made a point.
   const count=l.match(/x\s*(\d{1,3}(?:\.\d{3})+|\d{1,4})/);
-  const weight=r.match(/(\d+(?:\.\d+)?)/);
-  let grams=null;
-  // Kilograms are always printed with two decimals ("1.00 kg", "13.50 kg") and grams always whole, so a
-  // kg reading with no decimal point in it is one where the point was lost. Believing "1.00 kg" that
-  // came back as "100k" would turn a stack of ten into a thousand, so that weight is thrown away.
+  // The weight is the number with its g or kg after it ("8 S00 g" is a stray mark and 500 g); failing
+  // that, the first number there is.
+  const weight=r.match(/(\d+(?:\.\d+)?)(?=\s*k?\s*[g¢])/)??r.match(/(\d+(?:\.\d+)?)/);
+  let grams=null,labelled=false;
   if(weight){
-    const v=Number(weight[1]),dot=weight[1].includes('.'),kilos=/k/.test(r)||dot;
-    if(!kilos)grams=Math.round(v)||null;// nothing weighs 0 g: that is "200g" with the 2 lost
+    const digits=weight[1],v=Number(digits),dot=digits.includes('.'),after=r.slice(weight.index+digits.length);
+    const kilos=dot||/^\s*k/.test(after);
+    // The number should be followed by its g or kg. One that came back as "100%", or bare, is a weight
+    // the reader struggled with: "1.00 kg" lost its point and its kg exactly that way.
+    labelled=/^\s*(k|[g¢])/.test(after);
+    if(!kilos){
+      // From 1000 g up the game prints kg, so four digits of grams is a misread - nearly always the g
+      // itself read as an 8 or a 9 ("200 g" as "2008").
+      if(v>=1000){grams=/^\d{3}[89]$/.test(digits)?Math.floor(v/10):null;labelled=grams!==null;}
+      else grams=Math.round(v)||null;// nothing weighs 0 g: that is "200g" with the 2 lost
+    }
     else if(dot)grams=Math.round(v*1000)||null;
+    // Kilograms are always printed with two decimals ("1.00 kg", "13.50 kg"), so a kg weight with no
+    // point in it lost just the point: "Look" is "100k", 1.00 kg. Read as 100 kg it would have made a
+    // stack of ten a thousand. Fewer than three digits is no kg weight the game prints.
+    else grams=/^\d{3,5}$/.test(digits)?v*10:null;
   }
   // The "x" is the thinnest glyph on the row and sometimes goes missing on its own, leaving "2". That is
-  // kept aside as a guess for when nothing else on the row could be read.
+  // kept aside, to be believed only when the weight says the same.
   const bareNumber=count?null:l.match(/^\s*(\d{1,3})\s*$/);
   // The game draws no count at all for a single item, so a count corner with nothing in it is itself
   // the answer - and it is what tells a lone 200 g band apart from a garbled stack of them.
-  return {n:count?Number(count[1].replace(/\./g,'')):null,grams,bare:!left.trim(),guess:bareNumber?Number(bareNumber[1]):null};
+  return {n:count?Number(count[1].replace(/\./g,'')):null,grams,bare:!left.trim(),guess:bareNumber?Number(bareNumber[1]):null,labelled};
 }
-// Grams per item for a band, learned from any slot that showed both a count and a weight - or from a
-// single item, whose whole weight is one item's worth.
-// Stacks weigh a round number per item (100 g, 200 g). A misread count gives an odd ratio, which is skipped.
+// Grams per item for something the game facts below do not cover, from the slots of this screenshot
+// that showed both a count and a weight. Stacks weigh a round number per item (100 g, 200 g), so a
+// misread count gives an odd ratio, which is skipped. A lone item is no evidence: its empty count corner
+// may be a count the reader lost, and "x2  200 g" read that way once taught the scanner a 200 g band.
+// Neither is "x1", which the game never draws (it is "x10" with a digit lost). Nothing learned is kept
+// between screenshots - one bad read once taught it 10 g Brown and every later stack of five came out
+// as fifty.
 const tally=(into,key,value)=>{(into[key]??={})[value]=(into[key][value]||0)+1;};
 const top=votes=>Number(Object.entries(votes).sort((a,b)=>b[1]-a[1])[0][0]);
-export function inferUnits(rows,known={}){
-  const units={...known},counted={},singles={};
-  for(const r of rows){
-    if(r.n&&r.grams){const u=r.grams/r.n;if(u>0&&u%10===0)tally(counted,r.bandId,u);}
-    else if(r.bare&&r.grams>0&&r.grams%10===0)tally(singles,r.bandId,r.grams);
-  }
-  for(const [bandId,v] of Object.entries(singles))units[bandId]=top(v);
-  for(const [bandId,v] of Object.entries(counted))units[bandId]=top(v);// a counted stack outranks a lone item
+const perItem=r=>r.n>1&&r.grams&&r.grams%r.n===0&&(r.grams/r.n)%10===0?r.grams/r.n:null;
+export function inferUnits(rows){
+  const units={},counted={};
+  for(const r of rows){const u=perItem(r);if(u)tally(counted,r.bandId,u);}
+  for(const [bandId,v] of Object.entries(counted))units[bandId]=top(v);
   return units;
 }
-// Two items do not weigh what a band weighs, and that is a fact of the game rather than something to
-// learn: Loose Change is 50 g a piece (x24 = 1.20 kg) and a Violet Stack 200 g. Borrowing the 100 g of
-// the bands around it read "x2  100 g" of loose change as one, and called it sure.
-export const usualUnit=name=>/loose|change|coin/i.test(name)?50:/violet/i.test(name)?200:null;
-// Bands in one screenshot nearly all weigh the same per item, so when a band never showed a readable
-// count of its own, what the rest of the screenshot weighs is a better guess than giving up on it.
+// What an item weighs is a fact of the game, not something to learn: every band is 100 g, a Violet
+// Stack 200 g, Loose Change 50 g a piece (x24 = 1.20 kg). Borrowing the 100 g of the bands around it
+// read "x2  100 g" of loose change as one, and called it sure.
+export const usualUnit=name=>/loose|change|coin/i.test(name)?50:/violet/i.test(name)?200:/\b(band|stack)s?\b/i.test(name)?100:null;
+// Bands in one screenshot nearly all weigh the same per item, so for an item the facts above do not
+// cover, what the rest of the screenshot weighs is a better guess than giving up on it.
 export function commonUnit(rows){
   const votes={};
-  for(const r of rows){
-    if(r.n&&r.grams){const u=r.grams/r.n;if(u>0&&u%10===0)tally(votes,'u',u);}
-    else if(r.bare&&r.grams>0&&r.grams%10===0)tally(votes,'u',r.grams);
-  }
+  for(const r of rows){const u=perItem(r);if(u)tally(votes,'u',u);}
   return votes.u?top(votes.u):null;
 }
 // A count nobody can stand behind is worth less than an honest blank: qty null makes the screen say
 // "not readable" and the number gets typed in, instead of a wrong one being added up in silence.
 const sane=q=>Number.isFinite(q)&&q>=1&&q<=9999;
+// Sure takes two things on the slot that agree: the count and the weight, or an empty count corner and
+// the weight of one item. They are drawn apart and misread apart, so being sure and wrong would take both
+// going wrong the same way. Given two reads of a slot, everything either of them made out has to agree.
+// Anything short of that is offered, flagged: "x10  1.00 kg" once came back as "ao  100%", was taken
+// at its weight alone, and was added up as one, for sure.
 // `borrowed` means the unit is the rest of the screenshot's, not this band's own: good enough to
 // suggest a number, not to vouch for it.
-export function resolveCount({n,grams,bare,guess=null},unit,borrowed=false){
-  const weighed=grams&&unit?grams/unit:null;
-  if(n===null&&bare&&grams)return {qty:1,sure:true};// an empty count corner beside a weight means one
-  if(n!==null){
-    // Count and weight are drawn independently, so when they agree the slot is settled.
-    if(weighed===null)return sane(n)?{qty:n,sure:true}:{qty:null,sure:false};
-    if(Math.abs(n-weighed)<=.05)return {qty:n,sure:true};
-    const q=Math.round(weighed);// they disagree: the weight is the bigger, cleaner text, so it wins
-    return sane(q)?{qty:q,sure:false}:sane(n)?{qty:n,sure:false}:{qty:null,sure:false};
+export function resolveCount(reads,unit,borrowed=false){
+  const counts=[],guesses=[],weights=[],rough=[];
+  let empty=true,weighedAny=false;
+  for(const {n,grams,bare,guess=null,labelled=true} of [reads].flat()){
+    if(grams)weighedAny=true;
+    // A weight that comes to a whole number of items says how many there are; one that does not was
+    // misread. One that lost its g or kg ("100%") is a read the reader struggled with.
+    const weighed=grams&&unit?grams/unit:null,near=weighed===null?null:Math.round(weighed);
+    if(near!==null&&Math.abs(weighed-near)<=.05&&sane(near))(labelled&&!borrowed?weights:rough).push(near);
+    // The game never draws "x1", so a one there is a count that lost a digit ("x10" as "x1"). A number with
+    // no x may be a count that lost its x ("2" for "x2"), or a hotbar key, or "x5" read as "3": it can make
+    // a slot sure by agreeing with the weight, but it never names the number on its own.
+    if(n!==null){if(n!==1&&sane(n))counts.push(n);}
+    else if(guess!==null&&guess>=2&&sane(guess))guesses.push(guess);
+    if(!bare)empty=false;
   }
-  if(weighed!==null){const q=Math.round(weighed);return sane(q)?{qty:q,sure:!borrowed&&Math.abs(weighed-q)<.05}:{qty:null,sure:false};}
-  if(grams)return {qty:1,sure:false};// nothing is drawn for a single item, so a weight alone means one
-  if(guess!==null&&guess>=2&&sane(guess))return {qty:guess,sure:false};// "x2" that lost its x: say it, but flag it
-  return {qty:null,sure:false};
+  // An empty count corner means one item - unless another read found the count the first one dropped.
+  const made=[...counts,...guesses],said=made.length?made:empty?[1]:[],all=[...said,...weights];
+  if(said.length&&weights.length&&all.every(v=>v===all[0]))return {qty:all[0],sure:true};
+  // Short of that, the number most of the reads point at. The weight is the bigger, cleaner text, so it
+  // breaks a tie; a rough weight only speaks when nothing else did. And since nothing is drawn for one
+  // item, a weight with no unit to divide it by still means one.
+  const votes=new Map();
+  for(const v of counts)votes.set(v,(votes.get(v)||0)+1);
+  for(const v of weights)votes.set(v,(votes.get(v)||0)+1.1);
+  const best=[...votes].sort((a,b)=>b[1]-a[1])[0]?.[0]??rough[0]??(weighedAny&&!unit?1:null);
+  return {qty:best,sure:false};
 }
 
 // --- main entry ----------------------------------------------------------
@@ -416,6 +460,7 @@ export async function scanImage(file,bands,{onProgress}={}){
     else if(m.status==='recognizing text')onProgress({phase:'read',text:(phase==='names'?'Finding bands… ':'Reading counts… ')+pct+'%'});
   };
   const worker=await reader();
+  try{localStorage.removeItem(UNIT_KEY);}catch{}
   const src=await raster(file),aliases=readAliases();
   // The decoded bitmap and its full-size canvas are the largest things here, so a failed read has to release them too.
   try{
@@ -482,25 +527,31 @@ export async function scanImage(file,bands,{onProgress}={}){
     phase='counts';onProgress?.({phase:'read',text:'Reading counts…'});
     const parse=(row,i)=>({...parseRow(row),text:(row.left+' · '+row.right).trim(),bandId:slots[i].band.id,conf:row.conf});
     const rows=(await readRows(worker,src,slotRows(slots,src.unit,anchors,grid))).map(parse);
+    // What an item weighs: the game's own facts, else what this screenshot's counted stacks say. Nothing
+    // is carried over from one screenshot to the next.
+    const fixed=Object.fromEntries(bands.map(b=>[b.id,usualUnit(b.name)]));
+    const units=inferUnits(rows.filter(r=>!fixed[r.bandId])),shared=commonUnit(rows);
+    const settle=(reads,bandId)=>{const own=fixed[bandId]||units[bandId];return resolveCount(reads,own||shared,!own);};
+    const found=rows.map(r=>({reads:[r],...settle(r,r.bandId)}));
     // A crop that lands a pixel or two off clips the digits enough to lose them, and the height that
     // reads one slot cleanly is not the one that reads its neighbour - sweeping the height moved single
-    // slots in and out of legibility with no best setting. So instead of tuning it, the slots that came
-    // back with neither a count nor a weight get one more go at a tighter crop. It costs one small read.
-    const missed=rows.flatMap((r,i)=>r.n===null&&r.grams===null?[i]:[]);
-    if(missed.length){
+    // slots in and out of legibility with no best setting. So every slot whose count and weight did not
+    // agree gets a second look at a tighter crop, and the two reads are weighed together. It costs one
+    // small read. That look is cut to black and white first (RETRY_INK): on a strip with this little ink
+    // the reader's own threshold lands too high, the glow round each letter runs together, and slots came
+    // back blank on both reads.
+    const again=found.flatMap((f,i)=>f.sure?[]:[i]);
+    if(again.length){
       const tight=slotRows(slots,src.unit,anchors,grid,1);
-      (await readRows(worker,src,missed.map(i=>tight[i]))).forEach((row,k)=>{
-        const again=parse(row,missed[k]);
-        if(again.n!==null||again.grams!==null)rows[missed[k]]=again;
+      (await readRows(worker,src,again.map(i=>tight[i]),RETRY_INK)).forEach((row,k)=>{
+        const i=again[k],reads=[rows[i],parse(row,i)];
+        found[i]={reads,...settle(reads,rows[i].bandId)};
       });
     }
-    const units=inferUnits(rows,readJson(UNIT_KEY));writeJson(UNIT_KEY,units);
-    const fixed=Object.fromEntries(bands.map(b=>[b.id,usualUnit(b.name)]));
-    const shared=commonUnit(rows.filter(r=>!fixed[r.bandId]));
-    items=rows.map((row,i)=>{
-      const own=fixed[row.bandId]||units[row.bandId],{qty,sure}=resolveCount(row,own||shared,!own),line=slots[i];
-      const x=Math.round(line.x0/src.scale),y=Math.round(line.y0/src.scale);
-      return {text:line.text,bandId:line.band.id,name:line.band.name,qty,sure,raw:row.text,x,y,box:boxAt(x,y)||gridBox(line),confidence:confidence(qty,sure,row.conf)};
+    items=found.map(({reads,qty,sure},i)=>{
+      const line=slots[i],x=Math.round(line.x0/src.scale),y=Math.round(line.y0/src.scale);
+      return {text:line.text,bandId:line.band.id,name:line.band.name,qty,sure,raw:reads.map(r=>r.text).join(' / '),x,y,box:boxAt(x,y)||gridBox(line),
+        confidence:confidence(qty,sure,Math.max(...reads.map(r=>r.conf)))};
     });
   }
   return {items,others,othersAt,width:src.bitmap.width,height:src.bitmap.height,ms:Math.round(performance.now()-started)};

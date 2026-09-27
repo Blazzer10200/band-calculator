@@ -1,5 +1,6 @@
 // Shared by the browser and api.mjs. Money is always integer cents.
-export const money=value=>'$'+(value/100).toLocaleString('en-US',{maximumFractionDigits:2});
+// Whole dollars print without cents ($25); anything with cents prints both digits ($12.30, never $12.3).
+export const money=value=>'$'+(value/100).toLocaleString('en-US',{minimumFractionDigits:value%100?2:0,maximumFractionDigits:2});
 export const cents=value=>Math.round(Number(value)*100);
 export const TIME_ZONE='America/Chicago';
 export const dayOf=(now=Date.now())=>new Intl.DateTimeFormat('en-CA',{timeZone:TIME_ZONE,year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(now));

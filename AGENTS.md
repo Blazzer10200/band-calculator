@@ -16,11 +16,11 @@ Keep work focused on the user's current request. This file maps the project; it 
 | Concern | Start with |
 | --- | --- |
 | Routes, header, page mounting | app.js: routeNames, followRoute, render |
-| Calculator screen (counts, scanner, quick math) | calculator-ui.js: mountCalculator; band-scan.js; quick-math.js |
+| Calculator screen (counts, scanner, quick math) | calculator-ui.js: mountCalculator; band-scan.js (reading a screenshot), scan-viewer.js (the viewer); quick-math.js |
 | Dragging and resizing the calculator panels | panel-layout.js: createPanelLayout (820px and wider only) |
 | History, Admin | history-ui.js: mountHistory; admin-ui.js: mountAdmin |
 | Money and day rules (browser + server) | calc-model.js |
-| Sign in, account dialog, two-factor, Activity, Backups | auth-ui.js, security-ui.js |
+| Sign in, account dialog, two-factor, Activity, Backups | auth-ui.js, security-ui.js; server side security-store.mjs, security-crypto.mjs, restore-backup.mjs |
 | Backend (local, sample and Cloudflare Worker) | api.mjs; cloudflare-worker.mjs + cloudflare-edge.mjs |
 | Look and feel ("Ledger") | tokens.css (colors, type, radii), then styles, polish, experience (motion), auth, security, calculator, app |
 | Browser asset/build boundary | client-files.mjs, build-client.mjs |
@@ -41,8 +41,10 @@ Search anchored symbols with `rg -n`; avoid dumping minified CSS or whole large 
 
 - CSS/copy: inspect the affected page and phone layout; `git diff --check`. Do not rerun unrelated backend tests.
 - JavaScript changes: `npm run check` and the affected behavior below.
-- Money, bills, or presence: `npm run test:finance`.
-- Identity, permissions, approvals: `npm run test:access`.
+- Calculator backend (`api.mjs`: sign-up, prices, counts, cash-outs, restore): `npm run test:api`.
+- Scanner (`band-scan.js`): `node --test band-scan.test.js`, plus the private bench in `.local/scan/` when it is there (docs/DEVELOPMENT.md). Run the bench before and after; every band must stay right.
+- Two-factor, recovery, backup encryption: `node --test security.test.js`. Worker edge (CORS, cookie, bearer): `node --test cloudflare.test.js`.
+- Legacy modules only: `npm run test:finance`, `npm run test:access`.
 - Storage/security/API changes spanning both adapters: `npm test`.
 - Before publication or a build-boundary change: `npm run verify:build`. This builds and verifies locally; it does not publish.
 - Reuse passed checks when their inputs have not changed. Repeat after a relevant change, failure, or unresolved concern. Report the actual scope; focused tests are not the full suite.

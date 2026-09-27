@@ -10,7 +10,7 @@ A free account adds a running total, cash-outs, History, and (for the Owner) an 
 
 **Count bands.** Step each band up or type the number; the total updates as you go.
 
-**Scan a screenshot.** Snip your inventory (Win+Shift+S), then paste or drop the image. It's read on your own device with a vendored copy of Tesseract (Apache-2.0); nothing is uploaded. Each slot's `xN` count is checked against its weight (100 g per band, Violet 200 g, Loose change 50 g). A count the weight doesn't agree with is flagged "double-check this one", and a slot it can't read comes back as "?" instead of a guess. The picture-only view (no names or weights, just the stacks with a small boxed count in the corner) works too: the band is told apart by the colour of its paper strap, and a slot with no box counts as one.
+**Scan a screenshot.** Snip your inventory (Win+Shift+S), then paste or drop the image. It's read on your own device with a vendored copy of Tesseract (Apache-2.0); nothing is uploaded. Each slot's `xN` count and its weight are read separately and checked against each other (100 g per band, Violet 200 g, Loose change 50 g). A slot is only marked sure when they agree; anything unsure gets a second, closer read, and if it still doesn't add up it's flagged "double-check this one", or comes back as "?" instead of a guess. The picture-only view (no names or weights, just the stacks with a small boxed count in the corner) works too: the band is told apart by the colour of its paper strap, and a slot with no box counts as one.
 
 When you add a screenshot, a viewer opens on top of the calculator. It shows your screenshot with a box around every slot it read (green = sure, amber = double-check, red = unreadable). Hover a result to zoom in on its slots, fix any count with − and +, then press **Fill in counts** to add them to the calculator.
 
@@ -35,8 +35,8 @@ Routes, selectors, and the sample accounts are in [docs/DEVELOPMENT.md](./docs/D
 
 ```sh
 npm run check          # syntax check every module
-npm test               # full test suite
-npm run verify:build   # check + Pages build. Builds only, never publishes.
+npm test               # full test suite (100 tests)
+npm run verify:build   # check + Pages build + module check. Builds only, never publishes.
 ```
 
 ## Publishing

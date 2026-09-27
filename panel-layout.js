@@ -31,7 +31,8 @@ export function createPanelLayout({key,onChange}){
       const parsed=JSON.parse(raw),out={};
       for(const p of PANELS){
         const b=parsed?.[p.id];if(!validBox(b))return null;
-        out[p.id]={x:clamp(b.x,0,.95),y:Math.max(0,b.y),w:clamp(b.w,.08,1),h:Math.max(MIN_H,b.h)};
+        const x=clamp(b.x,0,.92);
+        out[p.id]={x,y:Math.max(0,b.y),w:clamp(b.w,.08,1-x),h:Math.max(MIN_H,b.h)};
       }
       return out;
     }catch{return null;}
