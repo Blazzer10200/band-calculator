@@ -16,8 +16,9 @@ function fakeStorage(){
 }
 function worker({seed=null,storage=fakeStorage()}={}){
   const api=createApi({storage:durableStorage(storage),key:randomBytes(32),local:false,cookieName:SESSION_COOKIE,hash:WORKER_HASH,setupCode:'open-sesame-42',seed});
-  const call=(path,{method='GET',body,token,origin=SITE_ORIGIN}={})=>edge(new Request('https://band-calculator.example.workers.dev'+path,{method,headers:{...(origin?{origin}:{}),...(token?{authorization:'Bearer '+token}:{}),...(body?{'content-type':'application/json','x-bandbook-request':'1'}:{})},...(body?{body:JSON.stringify(body)}:{})}),request=>api.handle(request,{remoteAddress:'203.0.113.9'}));
-  return {call,db:storage.raw,storage};
+  const forward=request=>api.handle(request,{remoteAddress:'203.0.113.9'});
+  const call=(path,{method='GET',body,token,cookie,origin=SITE_ORIGIN}={})=>edge(new Request('https://band-calculator.example.workers.dev'+path,{method,headers:{...(origin?{origin}:{}),...(token?{authorization:'Bearer '+token}:{}),...(cookie?{cookie}:{}),...(body?{'content-type':'application/json','x-bandbook-request':'1'}:{})},...(body?{body:JSON.stringify(body)}:{})}),forward);
+  return {call,forward,db:storage.raw,storage};
 }
 test('the Pages site can set up, sign in and save through the Worker',async()=>{
   const {call,db}=worker();
@@ -35,7 +36,7 @@ test('the Pages site can set up, sign in and save through the Worker',async()=>{
   assert.equal(setup.status,200);
   assert.match(setup.headers.get('set-cookie'),new RegExp('^'+SESSION_COOKIE+'=[A-Za-z0-9_-]{43}; HttpOnly; SameSite=None; Secure; Partitioned; Path=/; Max-Age=2592000$'));
   const token=setup.headers.get('x-pto-session');assert.match(token,/^[A-Za-z0-9_-]{43}$/);
-  assert.equal(setup.headers.get('access-control-expose-headers'),'X-PTO-Session');
+  assert.equal(setup.headers.get('access-control-expose-headers'),'X-PTO-Session, X-PTO-Remember');
   assert.match(db.prepare('SELECT password FROM users WHERE owner=1').get().password,/^s4096\.8\.1\$[0-9a-f]{32}:[0-9a-f]{128}$/);
   const me=await (await call('/api/me',{token})).json();
   assert.equal(me.bands.length,7);
@@ -80,6 +81,44 @@ test('adapter run() reports changed rows',()=>{
   assert.equal(db.prepare('DELETE FROM t WHERE id=?').run(1).changes,1);
   assert.equal(db.prepare('DELETE FROM t WHERE id=?').run(9).changes,0);
   assert.deepEqual(db.prepare('SELECT id FROM t').all().map(row=>row.id),[2]);
+});
+test('"Keep me signed in" is passed to the page, and a kept cookie beats a stale bearer token',async()=>{
+  const {call}=worker(),owner={username:'blazzer',password:'correct horse battery',setupCode:'open-sesame-42'};
+  const kept=await call('/api/auth/setup',{method:'POST',body:{...owner,remember:true}});
+  assert.equal(kept.headers.get('x-pto-remember'),'1');
+  assert.match(kept.headers.get('access-control-expose-headers'),/X-PTO-Remember/);
+  const tabOnly=await call('/api/auth/login',{method:'POST',body:{...owner,remember:false}});
+  assert.equal(tabOnly.headers.get('x-pto-remember'),null);
+  const stale=tabOnly.headers.get('x-pto-session');
+  assert.equal((await call('/api/auth/logout',{method:'POST',token:stale,body:{}})).headers.get('x-pto-remember'),null);
+  const fresh=kept.headers.get('x-pto-session');
+  // A tab still holding the signed-out token must not hide the browser's good cookie.
+  assert.equal((await (await call('/api/session',{token:stale,cookie:SESSION_COOKIE+'='+fresh})).json()).authenticated,true);
+  assert.equal((await (await call('/api/session',{token:stale})).json()).authenticated,false);
+  assert.equal((await (await call('/api/session',{token:fresh,cookie:SESSION_COOKIE+'='})).json()).authenticated,true);
+});
+test('a browser that blocks the cookie stays signed in after the tab closes only when asked to',async t=>{
+  const {forward}=worker(),stores={};
+  const fakeStore=()=>{const m=new Map();return {getItem:k=>m.has(k)?m.get(k):null,setItem:(k,v)=>m.set(k,String(v)),removeItem:k=>m.delete(k),clear:()=>m.clear()};};
+  const globals={document:{querySelector:s=>s==='meta[name="band-api"]'?{content:'https://band-calculator.example.workers.dev'}:null},sessionStorage:stores.tab=fakeStore(),localStorage:stores.browser=fakeStore(),
+    // Never keeps or sends cookies, like Safari: only the bearer token carries the session.
+    fetch:(url,init)=>{const headers=new Headers(init.headers);headers.set('origin',SITE_ORIGIN);return edge(new Request(url,{method:init.method,headers,body:init.body}),forward);}};
+  const saved=Object.fromEntries(Object.keys(globals).map(k=>[k,Object.getOwnPropertyDescriptor(globalThis,k)]));
+  for(const [k,v] of Object.entries(globals))Object.defineProperty(globalThis,k,{configurable:true,writable:true,value:v});
+  t.after(()=>{for(const [k,d] of Object.entries(saved))d?Object.defineProperty(globalThis,k,d):delete globalThis[k];});
+  const {apiFetch}=await import('./api-config.js?cookies-blocked');
+  const post=(path,body)=>apiFetch(path,{method:'POST',headers:{'Content-Type':'application/json','X-Bandbook-Request':'1'},body:JSON.stringify(body)});
+  const signedIn=async()=>(await (await apiFetch('/api/session')).json()).authenticated;
+  const account={username:'kept.user',password:'a long enough password',remember:true};
+  assert.equal((await post('/api/auth/register',account)).status,200);
+  assert.equal(stores.tab.getItem('band-session'),null);assert.match(stores.browser.getItem('band-session'),/^[A-Za-z0-9_-]{43}$/);
+  stores.tab.clear();assert.equal(await signedIn(),true,'kept sign-in survives closing the tab');
+  assert.equal((await post('/api/auth/logout',{})).status,200);
+  assert.equal(stores.browser.getItem('band-session'),null);assert.equal(await signedIn(),false);
+  assert.equal((await post('/api/auth/login',{...account,remember:false})).status,200);
+  assert.match(stores.tab.getItem('band-session'),/^[A-Za-z0-9_-]{43}$/);assert.equal(stores.browser.getItem('band-session'),null);
+  assert.equal(await signedIn(),true);
+  stores.tab.clear();assert.equal(await signedIn(),false,'tab-only sign-in ends with the tab');
 });
 test('non-API paths send people to the site',async()=>{
   const response=await edge(new Request('https://band-calculator.example.workers.dev/'),()=>assert.fail('no API call'));

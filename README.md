@@ -35,7 +35,7 @@ Routes, selectors, and the sample accounts are in [docs/DEVELOPMENT.md](./docs/D
 
 ```sh
 npm run check          # syntax check every module
-npm test               # full test suite (100 tests)
+npm test               # full test suite (102 tests)
 npm run verify:build   # check + Pages build + module check. Builds only, never publishes.
 ```
 

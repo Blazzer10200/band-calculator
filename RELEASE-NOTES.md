@@ -1,5 +1,18 @@
 # Workspace release — September 2026
 
+## September 27 (later) — "Keep me signed in" works in every browser
+
+The site and the accounts server live on different addresses, so the sign-in cookie is a cross-site cookie.
+Browsers that block those (Safari and every iPhone browser, Brave, some privacy settings and in-app browsers)
+fell back to a token kept for one tab only, so closing the tab signed you out even with the box ticked.
+
+- **Ticked means kept.** With "Keep me signed in", that token is now kept for this browser for up to 30 days.
+  Unticked, it still ends when the tab closes.
+- **No more stuck "signed out" tab.** A tab holding an old token could hide a good sign-in from another tab,
+  even after a reload. The browser's cookie now wins.
+- Sign-out still clears everything. Deploy the Worker first, then the site; either order is safe.
+- Anyone already signed in on a cookie-blocking browser signs in once more after this update.
+
 ## September 27 — Scanner accuracy, fixes and docs
 
 The screenshot scanner was reworked around one rule: it would rather ask than be wrong. Only the site

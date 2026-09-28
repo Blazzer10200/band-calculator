@@ -14,7 +14,8 @@ Browser (index.html + *.js/*.css, served from disk)
        └─ api.mjs → cloudflare-worker.mjs (SQLite Durable Object) → band-calculator.blazzer.workers.dev   (PRODUCTION accounts)
 GitHub Pages build (dist/pages): <meta name="band-api"> = the Worker origin (also added to CSP connect-src).
   cloudflare-edge.mjs: CORS for blazzer10200.github.io, SameSite=None;Partitioned cookie, bearer fallback via
-  X-PTO-Session (token in sessionStorage). BAND_API= (empty) builds the old calculator-only site (<meta band-standalone>).
+  X-PTO-Session (token in localStorage when X-PTO-Remember=1 i.e. "Keep me signed in", else sessionStorage; a sent
+  cookie beats the bearer). BAND_API= (empty) builds the old calculator-only site (<meta band-standalone>).
   Workers Free = ~10 ms CPU/request → WORKER_HASH scrypt N=4096 (tagged "s4096.8.1$"); untagged = strong local hashes.
   Worker secrets: BAND_KEY (copy in .local/cloudflare-band-key.txt), SETUP_CODE (.local/cloudflare-setup-code.txt).
   Sign-ups never wait on the Owner when SETUP_CODE is set. Hashing runs in the Durable Object (30 s CPU), so strong
@@ -117,7 +118,7 @@ Static files are served from disk: reload after editing browser code. Server imp
 
 ```bash
 npm run check          # node --check on every module (syntax)
-npm test               # full node --test suite (100 tests, SQLite integration included)
+npm test               # full node --test suite (102 tests, SQLite integration included)
 node --test band-scan.test.js   # scanner reading rules (plus the bench above for any scanner change)
 npm run test:api       # the calculator backend (api.mjs)
 npm run test:finance   # legacy: money, bills, presence
