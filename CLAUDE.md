@@ -1,6 +1,6 @@
 # Band Calculator (formerly PTO Roaster) — Claude project reference
 
-`AGENTS.md` is the Codex/ChatGPT-side rulebook this project was born with; this file is the Claude-side one. Both describe the same repo. Read `HANDOFF.md` before starting. Do not replay completed work.
+`AGENTS.md` is the Codex/ChatGPT-side rulebook this project was born with; this file is the Claude-side one. Both describe the same repo. Read only the top "Current state / Next" block of `HANDOFF.md` (`Read` with `limit: 40`); older sessions live in `HANDOFF-archive.md`, open it only when the task needs history. Do not replay completed work.
 
 ## What this is
 
@@ -138,7 +138,7 @@ CSS/copy-only change: inspect the page at phone + desktop width, then `git diff 
 - Live prices are edited by the Owner on the Admin page (stored in the Worker). `DEFAULT_BANDS` only seeds a fresh database and the calculator-only build. Test the Pages build locally with `pages-preview` (launch.json, port 4190, serves `dist/pages`).
 - Money is integer cents. Each saved count snapshots band name/color/price per line; price edits never rewrite history. Saves carry `pricesRevision`, stale ones get 409.
 - Deploy only files named in `release.json` from a fresh staging dir.
-- `HANDOFF.md` and `WEBSITE-REVIEW.md` are deliberately untracked (private ops notes). Keep them that way.
+- `HANDOFF.md`, `HANDOFF-archive.md` and `WEBSITE-REVIEW.md` are deliberately untracked (private ops notes; the repo is public). Keep them that way: never `git add -A` / `git add .` without checking `git status` first.
 
 ## Publish targets (for reference, user-triggered only)
 
