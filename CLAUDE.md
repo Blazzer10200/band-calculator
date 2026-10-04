@@ -130,7 +130,7 @@ CSS/copy-only change: inspect the page at phone + desktop width, then `git diff 
 
 ## Rules that bite
 
-- **Never publish unasked.** GitHub Pages deploys only through manual dispatch of `.github/workflows/pages.yml`; the Worker through `npm run cf:deploy` (wrangler, logged in as the user). Both are user-initiated. Worker before Pages when endpoints change.
+- **Claude pushes and deploys this project itself (user, 2026-10-03: "you can push and deploy things yourself").** This overrides the global "ask before push/deploy" rule for this repo only. When a change is committed and green (`npm test` + `verify:build`): `git push github main`, then `npm run cf:deploy` if any `*.mjs` the Worker imports changed, then `gh workflow run pages.yml` if anything the browser loads changed. Worker before Pages when endpoints change. Afterwards hit the live `/api/session` (expect 200) and note the Worker version ID in the handoff. Still never deploy a red build, and never touch production data.
 - **The Worker holds real accounts.** Test with `npm run cf:dev` (local workerd, `.dev.vars`, fresh state in `.wrangler/`), never against production.
 - **Never add a login bypass, dev-only credential, or test route.** Use the sample server for other roles.
 - **4173 is real data.** No test transactions there. Don't restart it or sign the user out just to check something.
@@ -140,7 +140,7 @@ CSS/copy-only change: inspect the page at phone + desktop width, then `git diff 
 - Deploy only files named in `release.json` from a fresh staging dir.
 - `HANDOFF.md`, `HANDOFF-archive.md` and `WEBSITE-REVIEW.md` are deliberately untracked (private ops notes; the repo is public). Keep them that way: never `git add -A` / `git add .` without checking `git status` first.
 
-## Publish targets (for reference, user-triggered only)
+## Publish targets
 
 - Frontend: https://blazzer10200.github.io/band-calculator/ (repo `Blazzer10200/band-calculator`, renamed from `pto-roaster`; remote name `github`; local folder is still `projects/pto-roaster`)
 - Backend: https://band-calculator.blazzer.workers.dev (the user's Cloudflare account, Workers Free, worker `band-calculator`)
