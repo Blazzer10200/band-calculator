@@ -65,7 +65,7 @@
 .security-back{display:block;margin:18px auto 0;font-size:12.5px}
 .security-wizard form>.button,.security-wizard>.button.primary{width:100%;height:46px;min-height:46px}
 .otp-input{height:60px!important;max-width:none;border-radius:12px!important;font:400 28px var(--font-num)!important;letter-spacing:.5em;text-align:center;padding-left:.5em!important}
-.otp-input::placeholder{letter-spacing:.4em;color:var(--faint)}
+.otp-input::placeholder{letter-spacing:.4em;color:var(--mute)}
 .security-overview .otp-input,.security-backup .otp-input{height:44px!important;border-radius:var(--r-input)!important;font-size:16px!important;letter-spacing:.4em}
 
 /* Two-factor and recovery sign-in screens (inside the auth split layout). */

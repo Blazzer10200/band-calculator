@@ -26,7 +26,7 @@ img,svg{display:block}
 .simple-nav{position:relative;display:flex;align-items:center;font-size:13px;color:var(--soft);white-space:nowrap;transition:color var(--t)}
 .simple-nav:hover{color:var(--ink)}
 .simple-nav.active{color:var(--ink)}
-.simple-nav.active::after{content:'';position:absolute;left:0;right:0;bottom:0;height:1px;background:var(--ink)}
+.simple-nav.active::after{content:'';position:absolute;left:0;right:0;bottom:-1px;height:2px;background:var(--ink)}
 .header-right{grid-area:right;display:flex;align-items:center;gap:18px;min-width:0}
 .header-status{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--soft);white-space:nowrap}
 .header-status::before{content:'';width:6px;height:6px;border-radius:50%;background:var(--good);animation:status-pulse 1800ms infinite}
@@ -37,7 +37,8 @@ img,svg{display:block}
 @media (max-width:760px){
   .simple-header{grid-template-columns:minmax(0,1fr) auto;grid-template-areas:"brand right" "nav nav";grid-template-rows:56px 44px;height:auto}
   .simple-header:not(:has(.finance-main-nav)){grid-template-rows:56px}
-  .finance-main-nav{margin:0 calc(-1 * var(--pad-x));padding:0 var(--pad-x);gap:22px;border-top:1px solid var(--line);overflow-x:auto;scrollbar-width:none}
+  .finance-main-nav{margin:0 calc(-1 * var(--pad-x));padding:0;gap:0;border-top:1px solid var(--line);display:grid;grid-auto-flow:column;grid-auto-columns:1fr}
+  .simple-nav{justify-content:center;font-size:14px}
   .brand{font-size:14px;gap:9px}
   .finance-logo{width:24px;height:24px}
   .header-status{display:none}

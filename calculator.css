@@ -339,7 +339,7 @@ html.sv-open{overflow:hidden}
 .qm-tape-row span:last-child{color:#9a9993}
 .qm-tape-row:hover span{color:var(--ink)}
 .qm-tape-row.is-new{animation:fade-up .3s var(--ease)}
-.qm-tape-empty{align-self:center;margin:auto 0;font-size:11.5px;color:var(--faint)}
+.qm-tape-empty{align-self:center;margin:auto 0;font-size:11.5px;color:var(--mute)}
 .qm-readout{display:flex;align-items:flex-end;gap:10px;padding-top:10px}
 .qm-pending{display:grid;place-items:center;min-width:26px;height:26px;margin-bottom:8px;border-radius:50%;background:#9ad6a91a;font:500 15px/1 var(--font-num);color:var(--good);opacity:0;transform:scale(.6);transition:opacity var(--t-fast) var(--ease),transform var(--t) var(--ease)}
 .qm-pending.is-on{opacity:1;transform:none}
