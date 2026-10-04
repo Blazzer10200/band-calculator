@@ -473,6 +473,7 @@ export async function scanImage(file,bands,{onProgress}={}){
   // Item names share one font: their typical height is the yardstick for everything around them.
   const heights=lines.map(l=>l.y1-l.y0).sort((a,b)=>a-b);
   src.unit=Math.max(8,heights.length?heights[heights.length>>1]:0);
+  const rawPx=heights.length?heights[heights.length>>1]/src.scale:null;
   // Slot outlines, from the coloured bar under every filled slot. The viewer draws them, and in the
   // inventory style with no names they are the only way in.
   const pixels=imagePixels(src.bitmap),boxes=slotBoxes(findBars(pixels));
@@ -554,7 +555,10 @@ export async function scanImage(file,bands,{onProgress}={}){
         confidence:confidence(qty,sure,Math.max(...reads.map(r=>r.conf)))};
     });
   }
-  return {items,others,othersAt,width:src.bitmap.width,height:src.bitmap.height,ms:Math.round(performance.now()-started)};
+  // How big the slots are in the original pixels. Bench: ~110px on every shot that reads perfectly,
+  // errors start near 95px (85% of that size) and the reads fall apart by 80px, so under 100px is flagged.
+  const slotPx=boxes.length?Math.round(boxes.map(b=>b.w).sort((a,b)=>a-b)[boxes.length>>1]):null;
+  return {items,others,othersAt,width:src.bitmap.width,height:src.bitmap.height,textPx:rawPx==null?null:Math.round(rawPx),slotPx,lowRes:(slotPx!=null&&slotPx<100)||(rawPx!=null&&rawPx<8.5),ms:Math.round(performance.now()-started)};
   }finally{src.canvas.width=src.canvas.height=0;src.bitmap?.close?.();}
 }
 function imagePixels(bitmap){

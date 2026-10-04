@@ -160,7 +160,8 @@ export function openScanViewer({shot,bands,from,reduceMotion,onFill,onAgain,onAl
     el.classList.remove('is-reading');
     const list=rows(),others=s.othersAt||[];
     if(s.error){status.className='sv-status is-warn';status.textContent=s.error;}
-    else{status.className='sv-status';status.textContent=list.length?'Found '+list.length+(list.length===1?' band':' bands')+(others.length?' and '+others.length+(others.length===1?' other item':' other items'):''):'No bands found in this screenshot';}
+    else{status.className='sv-status';status.textContent=list.length?'Found '+list.length+(list.length===1?' band':' bands')+(others.length?' and '+others.length+(others.length===1?' other item':' other items'):''):'No bands found in this screenshot';
+      if(s.lowRes&&list.length){status.className='sv-status is-warn';status.textContent+=' · small screenshot, check the counts';}}
     const total=$('[data-sv-total]');total.textContent=money(totalCents());total.classList.remove('is-reading');total.classList.toggle('is-in',!!animate);
     rowsEl.innerHTML=list.length?list.map(rowHtml).join(''):'<p class="sv-empty">'+(s.error?'Try another screenshot.':'Nothing here looks like a band. Try a closer screenshot of your inventory, or tell the scanner what one of the items below is.')+'</p>';
     rowsEl.classList.toggle('is-in',!!animate);
