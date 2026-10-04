@@ -1,3 +1,13 @@
+# Workspace release — October 2026
+
+## October 3 — Sessions last as long as you keep using them
+
+- **Signed in stays signed in.** "Keep me signed in" used to end exactly 30 days after you signed in, even if you
+  used the calculator every day. Now the 30 days count from your last visit. Tab-only sessions do the same with
+  their 12 hours.
+- **A yearly sign-in.** No session lives past one year from sign-in, however often it is used.
+- Existing sessions carry over; nobody needs to sign in again for this. Deploy the Worker; the site is unchanged.
+
 # Workspace release — September 2026
 
 ## September 27 (later) — "Keep me signed in" works in every browser

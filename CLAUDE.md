@@ -118,7 +118,7 @@ Static files are served from disk: reload after editing browser code. Server imp
 
 ```bash
 npm run check          # node --check on every module (syntax)
-npm test               # full node --test suite (102 tests, SQLite integration included)
+npm test               # full node --test suite (104 tests, SQLite integration included)
 node --test band-scan.test.js   # scanner reading rules (plus the bench above for any scanner change)
 npm run test:api       # the calculator backend (api.mjs)
 npm run test:finance   # legacy: money, bills, presence

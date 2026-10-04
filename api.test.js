@@ -14,8 +14,8 @@ const request=(route,method='GET',body,cookie='')=>new Request(origin+route,{met
 const token=response=>response.headers.get('set-cookie').split(';')[0];
 const id=()=>crypto.randomUUID();
 async function call(api,route,method,body,cookie){const response=await api.handle(request(route,method,body,cookie));return {status:response.status,body:await response.json(),response};}
-async function fixture(t){
-  const api=createApi({cookieName:'pto_test'});t.after(()=>api.close());
+async function fixture(t,options={}){
+  const api=createApi({cookieName:'pto_test',...options});t.after(()=>api.close());
   const owner=await api.handle(request('/api/auth/setup','POST',{username:'boss',password}));assert.equal(owner.status,200);
   const member=await api.handle(request('/api/auth/register','POST',{username:'Runner.One',password}));assert.equal(member.status,200);
   return {api,ownerCookie:token(owner),memberCookie:token(member)};
@@ -27,6 +27,33 @@ test('guests can read prices and the session but nothing personal',async t=>{
   const session=await call(api,'/api/session');assert.equal(session.body.authenticated,false);assert.equal(session.body.setupRequired,false);assert.equal(session.body.versions.prices,1);
   const bands=await call(api,'/api/bands');assert.equal(bands.status,200);assert.equal(bands.body.bands.length,7);assert.ok(bands.body.bands.every(b=>b.price>0&&b.active));
   for(const [route,method,body] of [['/api/me','GET'],['/api/counts','POST',{requestId:id()}],['/api/admin/bands','GET'],['/api/admin/users','GET']])assert.equal((await call(api,route,method,body)).status,401);
+});
+
+test('a session in use slides forward, is refreshed sparingly, and ends a year after sign-in',async t=>{
+  const hour=3600000,day=24*hour;let time=Date.UTC(2026,9,3,12);
+  const {api,memberCookie}=await fixture(t,{now:()=>time});
+  const expiresOf=remember=>api.db.prepare("SELECT expires FROM sessions WHERE remember=? AND user_id=(SELECT id FROM users WHERE username='runner.one') ORDER BY created DESC").get(Number(remember)).expires;
+  const poll=async cookie=>{const {status,body,response}=await call(api,'/api/session','GET',undefined,cookie);assert.equal(status,200);return {body,cookie:response.headers.get('set-cookie')};};
+  // Tab-only: the 12-hour limit counts from the last visit, refreshed at most every 30 minutes, and never re-sends the cookie.
+  const signedUp=expiresOf(false);assert.equal((await poll(memberCookie)).cookie,null);assert.equal(expiresOf(false),signedUp);
+  time+=hour;assert.equal((await poll(memberCookie)).cookie,null);assert.equal(expiresOf(false),time+12*hour);
+  time+=11*hour;assert.equal((await poll(memberCookie)).body.authenticated,true,'alive 12 hours after sign-up because it was used');
+  // Remembered: a visit two days later moves the end out 30 days and sends the same cookie again with a fresh Max-Age.
+  const kept=await api.handle(request('/api/auth/login','POST',{username:'runner.one',password,remember:true})),keptCookie=token(kept),signedIn=time;
+  assert.equal((await poll(keptCookie)).cookie,null);assert.equal(expiresOf(true),signedIn+30*day);
+  time+=2*day;const refreshed=await poll(keptCookie);
+  assert.ok(refreshed.cookie.startsWith(keptCookie+'; HttpOnly; SameSite=Strict; Path=/; Max-Age=2592000'),refreshed.cookie);assert.equal(expiresOf(true),time+30*day);
+  assert.equal((await poll(keptCookie)).cookie,null,'no second refresh right away');
+  time+=29*day;assert.equal((await poll(keptCookie)).body.authenticated,true,'31 days after sign-in, 29 after the last visit');
+  // Left alone for 31 days it ends and a visit does not bring it back.
+  time+=31*day;const lapsed=await poll(keptCookie);assert.equal(lapsed.body.authenticated,false);assert.equal(lapsed.cookie,null);
+  assert.equal((await poll(keptCookie)).body.authenticated,false);
+  // Visited every week it still ends a year after sign-in: Max-Age shrinks to fit the cap, then stops being sent.
+  const yearly=token(await api.handle(request('/api/auth/login','POST',{username:'runner.one',password,remember:true}))),start=time;
+  for(let week=1;week<=47;week++){time=start+week*7*day;const {body,cookie}=await poll(yearly);assert.equal(body.authenticated,true,'week '+week);assert.match(cookie,/Max-Age=2592000$/,'week '+week);}
+  time=start+340*day;assert.match((await poll(yearly)).cookie,/Max-Age=2160000$/);assert.equal(expiresOf(true),start+365*day);
+  time=start+364*day;const capped=await poll(yearly);assert.equal(capped.body.authenticated,true);assert.equal(capped.cookie,null,'nothing left to extend');
+  time=start+365*day+1;assert.equal((await poll(yearly)).body.authenticated,false);
 });
 
 test('sign-up is instant, usernames are unique, and members are not admins',async t=>{

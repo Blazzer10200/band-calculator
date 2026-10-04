@@ -14,8 +14,8 @@ function fakeStorage(){
     const statement=d.prepare(query);if(statement.columns().length)return cursor(statement.all(...args));statement.run(...args);return cursor([]);
   }},transactionSync:work=>{d.exec('BEGIN');try{const result=work();d.exec('COMMIT');return result;}catch(error){d.exec('ROLLBACK');throw error;}},raw:d};
 }
-function worker({seed=null,storage=fakeStorage()}={}){
-  const api=createApi({storage:durableStorage(storage),key:randomBytes(32),local:false,cookieName:SESSION_COOKIE,hash:WORKER_HASH,setupCode:'open-sesame-42',seed});
+function worker({seed=null,storage=fakeStorage(),now=Date.now}={}){
+  const api=createApi({storage:durableStorage(storage),key:randomBytes(32),local:false,cookieName:SESSION_COOKIE,hash:WORKER_HASH,setupCode:'open-sesame-42',seed,now});
   const forward=request=>api.handle(request,{remoteAddress:'203.0.113.9'});
   const call=(path,{method='GET',body,token,cookie,origin=SITE_ORIGIN}={})=>edge(new Request('https://band-calculator.example.workers.dev'+path,{method,headers:{...(origin?{origin}:{}),...(token?{authorization:'Bearer '+token}:{}),...(cookie?{cookie}:{}),...(body?{'content-type':'application/json','x-bandbook-request':'1'}:{})},...(body?{body:JSON.stringify(body)}:{})}),forward);
   return {call,forward,db:storage.raw,storage};
@@ -96,6 +96,16 @@ test('"Keep me signed in" is passed to the page, and a kept cookie beats a stale
   assert.equal((await (await call('/api/session',{token:stale,cookie:SESSION_COOKIE+'='+fresh})).json()).authenticated,true);
   assert.equal((await (await call('/api/session',{token:stale})).json()).authenticated,false);
   assert.equal((await (await call('/api/session',{token:fresh,cookie:SESSION_COOKIE+'='})).json()).authenticated,true);
+});
+test('a remembered session visited days later gets its token and lifetime sent again through the Worker',async()=>{
+  let time=Date.now();const {call}=worker({now:()=>time});
+  const setup=await call('/api/auth/setup',{method:'POST',body:{username:'blazzer',password:'correct horse battery',remember:true,setupCode:'open-sesame-42'}});
+  const token=setup.headers.get('x-pto-session');
+  assert.equal((await call('/api/session',{token})).headers.get('x-pto-session'),null);
+  time+=3*86400000;
+  const later=await call('/api/session',{token});
+  assert.equal(later.headers.get('x-pto-session'),token);assert.equal(later.headers.get('x-pto-remember'),'1');
+  assert.match(later.headers.get('set-cookie'),new RegExp('^'+SESSION_COOKIE+'='+token+'; HttpOnly; SameSite=None; Secure; Partitioned; Path=/; Max-Age=2592000$'));
 });
 test('a browser that blocks the cookie stays signed in after the tab closes only when asked to',async t=>{
   const {forward}=worker(),stores={};

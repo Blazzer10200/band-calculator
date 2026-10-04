@@ -47,6 +47,8 @@ function schema(db){
   for(const [name,type] of Object.entries({username:'TEXT',approval:"TEXT NOT NULL DEFAULT 'approved'",requested_at:'TEXT'}))if(!columns.has(name))db.exec(`ALTER TABLE users ADD COLUMN ${name} ${type}`);
   db.exec('CREATE UNIQUE INDEX IF NOT EXISTS unique_username ON users(username COLLATE NOCASE)');
   securitySchema(db);
+  // Sliding sessions: created caps how far a session can slide. Rows from before get their sign-in time back from the old hard expiry.
+  if(!db.prepare('PRAGMA table_info(sessions)').all().some(c=>c.name==='created')){db.exec('ALTER TABLE sessions ADD COLUMN created INTEGER NOT NULL DEFAULT 0');db.exec('UPDATE sessions SET created=expires-(CASE WHEN remember THEN 2592000000 ELSE 43200000 END)');}
 }
 // One time: copy prices and deposits out of the old single-document workspace. Old tables stay untouched.
 function importLegacy(db,seedBands,tx){
@@ -104,10 +106,23 @@ export function createApi({file=':memory:',storage,bands=DEFAULT_BANDS,key,now=D
   };
   const guestData=()=>({authenticated:false,setupRequired:!db.prepare('SELECT id FROM users WHERE owner=1').get(),...(setupCode?{setupCode:true}:{}),versions:{prices:pricesRevision()},development:local});
   const sessionData=user=>({authenticated:true,user,security:security.state(user),versions:{prices:pricesRevision(),counts:countsRevision(user.id)},development:local});
+  // A session lives 30 days (remembered) or 12 hours (tab-only) past its last visit, never more than a year past sign-in.
+  const SESSION_LIFE=remember=>remember?2592000000:43200000,SESSION_MAX=31536000000;
+  const sessionCookie=(token,maxAge=0)=>`${cookieName}=${token}; HttpOnly; SameSite=Strict; Path=/${maxAge>0?'; Max-Age='+maxAge:''}`;
   const newSession=(user,verified=false,remember=!!user.remembered)=>{
     db.prepare('DELETE FROM sessions WHERE expires<=?').run(now());
-    const token=randomBytes(32).toString('base64url');db.prepare('INSERT INTO sessions(hash,user_id,expires,mfa_verified,remember) VALUES(?,?,?,?,?)').run(digest(token),user.id,now()+(remember?2592000000:43200000),Number(verified),Number(remember));
-    return json(sessionData({...user,mfaVerified:verified,remembered:remember}),200,{'Set-Cookie':`${cookieName}=${token}; HttpOnly; SameSite=Strict; Path=/${remember?'; Max-Age=2592000':''}`});
+    const token=randomBytes(32).toString('base64url');db.prepare('INSERT INTO sessions(hash,user_id,expires,mfa_verified,remember,created) VALUES(?,?,?,?,?,?)').run(digest(token),user.id,now()+SESSION_LIFE(remember),Number(verified),Number(remember),now());
+    return json(sessionData({...user,mfaVerified:verified,remembered:remember}),200,{'Set-Cookie':sessionCookie(token,remember?2592000:0)});
+  };
+  // Called on every /api/session poll; writes at most once per life/24 (30 h remembered, 30 min tab-only).
+  // A remembered cookie is sent again with its new lifetime so the browser's copy slides too (the edge turns that into X-PTO-Session/X-PTO-Remember).
+  const extendSession=request=>{
+    const token=cookieToken(request),row=db.prepare('SELECT expires,remember,created FROM sessions WHERE hash=? AND expires>?').get(digest(token),now());
+    if(!row)return {};
+    const life=SESSION_LIFE(row.remember),expires=Math.min(now()+life,row.created+SESSION_MAX);
+    if(expires-row.expires<life/24)return {};
+    db.prepare('UPDATE sessions SET expires=? WHERE hash=?').run(expires,digest(token));
+    return row.remember?{'Set-Cookie':sessionCookie(token,Math.ceil((expires-now())/1000))}:{};
   };
   // Old roster columns (stateId, phone, ...) are left out so a backup restores into a fresh database.
   const snapshot=()=>({format:'pto-calc-backup',version:1,createdAt:new Date(now()).toISOString(),key:key.toString('base64'),tables:Object.fromEntries(TABLES.map(table=>[table,db.prepare('SELECT '+(table==='users'?USER_COLUMNS:'*')+' FROM '+table).all().map(row=>table==='account_security'?{...row,pending:null,pending_until:null}:{...row})]))});
@@ -127,7 +142,7 @@ export function createApi({file=':memory:',storage,bands=DEFAULT_BANDS,key,now=D
       try{body=JSON.parse(raw);if(!body||typeof body!=='object'||Array.isArray(body))throw Error();}catch{return json({error:'Invalid request.'},400);}
     }
     let user=auth(request);
-    if(route==='/api/session'&&method==='GET')return json(user?sessionData(user):guestData());
+    if(route==='/api/session'&&method==='GET')return json(user?sessionData(user):guestData(),200,user?extendSession(request):{});
     if(route==='/api/bands'&&method==='GET')return json({pricesRevision:pricesRevision(),bands:bandRows()});
     try{
       const securityResponse=await security.handle(request,body,user,remoteAddress);
