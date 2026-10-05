@@ -42,9 +42,9 @@ test('the Pages site can set up, sign in and save through the Worker',async()=>{
   assert.equal(me.bands.length,7);
   assert.equal((await call('/api/counts',{method:'POST',token,origin:'https://evil.example',body:{requestId:'count-0001',pricesRevision:me.pricesRevision,lines:[{id:'band-1',quantity:2}]}})).status,403);
   const saved=await call('/api/counts',{method:'POST',token,body:{requestId:'count-0001',pricesRevision:me.pricesRevision,lines:[{id:'band-1',quantity:2}]}});
-  assert.equal(saved.status,201);assert.equal((await saved.json()).counts[0].total,20000);
+  assert.equal(saved.status,201);assert.equal((await saved.json()).counts[0].total,250000);
   const cashout=await call('/api/cashouts',{method:'POST',token,body:{requestId:'cash-00001',expectedIds:['count-0001']}});
-  assert.equal(cashout.status,201);assert.equal((await cashout.json()).cashouts[0].amount,20000);
+  assert.equal(cashout.status,201);assert.equal((await cashout.json()).cashouts[0].amount,250000);
   const logout=await call('/api/auth/logout',{method:'POST',token,body:{}});
   assert.equal(logout.headers.get('x-pto-session'),'signed-out');
   assert.equal((await call('/api/me',{token})).status,401);
@@ -70,7 +70,7 @@ test('accounts from a local server sign in on the Worker with their old password
   const login=await call('/api/auth/login',{method:'POST',body:owner});
   assert.equal(login.status,200);assert.equal((await login.json()).user.owner,true);
   const me=await (await call('/api/me',{token:login.headers.get('x-pto-session')})).json();
-  assert.equal(me.counts[0].total,30000);assert.equal(me.bands.length,7);
+  assert.equal(me.counts[0].total,375000);assert.equal(me.bands.length,7);
   // A restart with the secret still set must not load it again over live accounts.
   worker({seed,storage});assert.equal(storage.raw.prepare('SELECT count(*) AS n FROM users').get().n,1);
   assert.throws(()=>worker({seed:{...seed,tables:{...seed.tables,users:[]}}}),/one Owner/);

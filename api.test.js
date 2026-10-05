@@ -94,8 +94,8 @@ test('counts snapshot prices, are idempotent, private, and removable',async t=>{
   const {api,ownerCookie,memberCookie}=await fixture(t);
   const me=(await call(api,'/api/me','GET',undefined,memberCookie)).body,body=countBody(me,[2,3],{notes:' first run '});
   const first=await call(api,'/api/counts','POST',body,memberCookie);assert.equal(first.status,201);
-  assert.equal(first.body.counts.length,1);assert.equal(first.body.counts[0].total,2*2500+3*10000);assert.equal(first.body.counts[0].notes,'first run');
-  assert.deepEqual(first.body.counts[0].lines.map(l=>[l.id,l.quantity,l.price]),[['band-0',2,2500],['band-1',3,10000]]);
+  assert.equal(first.body.counts.length,1);assert.equal(first.body.counts[0].total,2*2500+3*125000);assert.equal(first.body.counts[0].notes,'first run');
+  assert.deepEqual(first.body.counts[0].lines.map(l=>[l.id,l.quantity,l.price]),[['band-0',2,2500],['band-1',3,125000]]);
   assert.equal((await call(api,'/api/counts','POST',body,memberCookie)).body.counts.length,1);
   assert.equal((await call(api,'/api/counts','POST',body,ownerCookie)).status,400);
   assert.equal((await call(api,'/api/me','GET',undefined,ownerCookie)).body.counts.length,0);
@@ -116,7 +116,7 @@ test('cash-out closes open counts, checks what the screen saw, and only the late
   me=(await call(api,'/api/counts','POST',countBody(me,[0,1]),memberCookie)).body;
   assert.equal((await call(api,'/api/cashouts','POST',{requestId:id(),expectedIds:[me.counts[0].id]},memberCookie)).status,409);
   const first=await call(api,'/api/cashouts','POST',{requestId:id(),expectedIds:me.counts.map(c=>c.id)},memberCookie);
-  assert.equal(first.status,201);assert.equal(first.body.cashouts[0].amount,12500);assert.ok(first.body.counts.every(c=>c.cashoutId===first.body.cashouts[0].id));
+  assert.equal(first.status,201);assert.equal(first.body.cashouts[0].amount,127500);assert.ok(first.body.counts.every(c=>c.cashoutId===first.body.cashouts[0].id));
   assert.equal((await call(api,`/api/counts/${me.counts[0].id}/remove`,'POST',{},memberCookie)).status,409);
   me=(await call(api,'/api/counts','POST',countBody(first.body,[2]),memberCookie)).body;
   const second=await call(api,'/api/cashouts','POST',{requestId:id(),expectedIds:me.counts.filter(c=>!c.cashoutId).map(c=>c.id)},memberCookie);
@@ -200,5 +200,5 @@ test('restore-backup.mjs restores a downloaded calculator backup into a new dire
   assert.equal(run.status,0,run.stderr);
   restored=createApi({file:path.join(target,'pto-dev.sqlite'),key:readFileSync(path.join(target,'security.key')),cookieName:'pto_test'});
   const login=await restored.handle(request('/api/auth/login','POST',{username:'runner.one',password}));assert.equal(login.status,200);
-  const after=(await call(restored,'/api/me','GET',undefined,token(login))).body;assert.equal(after.counts.length,1);assert.equal(after.counts[0].total,20000);
+  const after=(await call(restored,'/api/me','GET',undefined,token(login))).body;assert.equal(after.counts.length,1);assert.equal(after.counts[0].total,250000);
 });
